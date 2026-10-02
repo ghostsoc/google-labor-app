@@ -1,0 +1,1136 @@
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+} from 'firebase/auth';
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  getDocs,
+  writeBatch,
+} from 'firebase/firestore';
+import {
+  auth,
+  db,
+  googleProvider,
+  OperationType,
+  handleFirestoreError,
+  testConnection,
+} from '../firebase';
+import {
+  InventoryItem,
+  StaffMember,
+  LaborShift,
+  ClientQuote,
+  Invoice,
+  Client,
+  MaintenanceRecord,
+  CompanySettings,
+  ActiveTab,
+  QuoteStatus,
+  ItemStatus,
+  PaymentRecord,
+  AppUser,
+} from '../types';
+import {
+  initialInventory,
+  initialStaff,
+  initialShifts,
+  initialQuotes,
+  initialInvoices,
+  initialClients,
+  initialMaintenanceRecords,
+  initialCompanySettings,
+} from '../data/mockData';
+
+interface AppContextType {
+  activeTab: ActiveTab;
+  setActiveTab: (tab: ActiveTab) => void;
+
+  // Firebase Auth
+  currentUser: AppUser | null;
+  authLoading: boolean;
+  isCloudSynced: boolean;
+  signInWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
+
+  // Inventory
+  inventory: InventoryItem[];
+  addInventoryItem: (item: Omit<InventoryItem, 'id'>) => Promise<void>;
+  updateInventoryItem: (id: string, updates: Partial<InventoryItem>) => Promise<void>;
+  deleteInventoryItem: (id: string) => Promise<void>;
+  setItemMaintenanceStatus: (id: string, status: ItemStatus, inRepairCount?: number) => Promise<void>;
+
+  // Staff & Scheduling
+  staff: StaffMember[];
+  addStaffMember: (member: Omit<StaffMember, 'id'>) => Promise<void>;
+  updateStaffMember: (id: string, updates: Partial<StaffMember>) => Promise<void>;
+  deleteStaffMember: (id: string) => Promise<void>;
+
+  shifts: LaborShift[];
+  addShift: (shift: Omit<LaborShift, 'id'>) => Promise<void>;
+  updateShift: (id: string, updates: Partial<LaborShift>) => Promise<void>;
+  deleteShift: (id: string) => Promise<void>;
+
+  // Quotes
+  quotes: ClientQuote[];
+  addQuote: (quote: Omit<ClientQuote, 'id' | 'quoteNumber'>) => string;
+  updateQuote: (id: string, updates: Partial<ClientQuote>) => Promise<void>;
+  deleteQuote: (id: string) => Promise<void>;
+  updateQuoteStatus: (id: string, status: QuoteStatus) => Promise<void>;
+  convertQuoteToActiveJob: (id: string) => Promise<void>;
+  updatePulledGearCount: (quoteId: string, inventoryId: string, count: number) => Promise<void>;
+
+  // Invoices & Payments
+  invoices: Invoice[];
+  createInvoiceFromQuote: (quoteId: string) => string;
+  addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNumber'>) => string;
+  updateInvoice: (id: string, updates: Partial<Invoice>) => Promise<void>;
+  deleteInvoice: (id: string) => Promise<void>;
+  recordPayment: (invoiceId: string, payment: Omit<PaymentRecord, 'id'>) => Promise<void>;
+
+  // Clients CRM
+  clients: Client[];
+  addClient: (client: Omit<Client, 'id' | 'createdAt'>) => string;
+  updateClient: (id: string, updates: Partial<Client>) => Promise<void>;
+  deleteClient: (id: string) => Promise<void>;
+  selectedClientForDetail: Client | null;
+  setSelectedClientForDetail: (client: Client | null) => void;
+
+  // Maintenance
+  maintenanceRecords: MaintenanceRecord[];
+  addMaintenanceRecord: (record: Omit<MaintenanceRecord, 'id' | 'dateLogged'>) => Promise<void>;
+  updateMaintenanceRecord: (id: string, updates: Partial<MaintenanceRecord>) => Promise<void>;
+  completeMaintenanceRecord: (id: string, resolutionNotes: string, cost?: number) => Promise<void>;
+  deleteMaintenanceRecord: (id: string) => Promise<void>;
+
+  // Settings
+  settings: CompanySettings;
+  updateSettings: (newSettings: Partial<CompanySettings>) => Promise<void>;
+  resetAllData: () => Promise<void>;
+
+  // View / Print States
+  activeQuoteForPrint: ClientQuote | null;
+  setActiveQuoteForPrint: (quote: ClientQuote | null) => void;
+  activeInvoiceForPrint: Invoice | null;
+  setActiveInvoiceForPrint: (invoice: Invoice | null) => void;
+  selectedQuoteForPull: ClientQuote | null;
+  setSelectedQuoteForPull: (quote: ClientQuote | null) => void;
+}
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const STORAGE_PREFIX = 'inthewind_av_';
+
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+
+  // Firebase Auth State
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [isCloudSynced, setIsCloudSynced] = useState<boolean>(false);
+
+  // Entities State
+  const [inventory, setInventory] = useState<InventoryItem[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}inventory`);
+    return saved ? JSON.parse(saved) : initialInventory;
+  });
+
+  const [staff, setStaff] = useState<StaffMember[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}staff`);
+    return saved ? JSON.parse(saved) : initialStaff;
+  });
+
+  const [shifts, setShifts] = useState<LaborShift[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}shifts`);
+    return saved ? JSON.parse(saved) : initialShifts;
+  });
+
+  const [quotes, setQuotes] = useState<ClientQuote[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}quotes`);
+    return saved ? JSON.parse(saved) : initialQuotes;
+  });
+
+  const [invoices, setInvoices] = useState<Invoice[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}invoices`);
+    return saved ? JSON.parse(saved) : initialInvoices;
+  });
+
+  const [clients, setClients] = useState<Client[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}clients`);
+    return saved ? JSON.parse(saved) : initialClients;
+  });
+
+  const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}maintenance`);
+    return saved ? JSON.parse(saved) : initialMaintenanceRecords;
+  });
+
+  const [settings, setSettings] = useState<CompanySettings>(() => {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}settings`);
+    return saved ? JSON.parse(saved) : initialCompanySettings;
+  });
+
+  const [activeQuoteForPrint, setActiveQuoteForPrint] = useState<ClientQuote | null>(null);
+  const [activeInvoiceForPrint, setActiveInvoiceForPrint] = useState<Invoice | null>(null);
+  const [selectedQuoteForPull, setSelectedQuoteForPull] = useState<ClientQuote | null>(null);
+  const [selectedClientForDetail, setSelectedClientForDetail] = useState<Client | null>(null);
+
+  const isSeedingRef = useRef(false);
+
+  // Verify Firestore connection on initial boot
+  useEffect(() => {
+    testConnection();
+  }, []);
+
+  // Listen to Firebase Auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        const appUser: AppUser = {
+          uid: fbUser.uid,
+          email: fbUser.email,
+          displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'AV Crew Member',
+          photoURL: fbUser.photoURL,
+          role:
+            fbUser.email?.includes('chris') || fbUser.email?.includes('admin')
+              ? 'Admin'
+              : 'Lead Engineer',
+        };
+        setCurrentUser(appUser);
+        setAuthLoading(false);
+
+        // Sync or create user profile document in Firestore
+        try {
+          const userDocPath = `users/${fbUser.uid}`;
+          await setDoc(
+            doc(db, 'users', fbUser.uid),
+            {
+              uid: fbUser.uid,
+              email: fbUser.email || '',
+              displayName: appUser.displayName,
+              photoURL: fbUser.photoURL || '',
+              role: appUser.role,
+              createdAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        } catch (err) {
+          console.warn('User profile sync skipped/non-fatal:', err);
+        }
+      } else {
+        setCurrentUser(null);
+        setAuthLoading(false);
+        setIsCloudSynced(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Set up Firestore real-time listeners and initial seeding when user is logged in
+  useEffect(() => {
+    if (!currentUser) {
+      setIsCloudSynced(false);
+      return;
+    }
+
+    const unsubscribers: (() => void)[] = [];
+
+    // Helper to seed initial documents if collection is empty
+    const checkAndSeedCollection = async () => {
+      if (isSeedingRef.current) return;
+      isSeedingRef.current = true;
+
+      try {
+        const invSnap = await getDocs(collection(db, 'inventory'));
+        if (invSnap.empty) {
+          const batch = writeBatch(db);
+          // Seed inventory
+          initialInventory.forEach((item) => {
+            batch.set(doc(db, 'inventory', item.id), item);
+          });
+          // Seed staff
+          initialStaff.forEach((st) => {
+            batch.set(doc(db, 'staff', st.id), st);
+          });
+          // Seed shifts
+          initialShifts.forEach((sh) => {
+            batch.set(doc(db, 'shifts', sh.id), sh);
+          });
+          // Seed quotes
+          initialQuotes.forEach((q) => {
+            batch.set(doc(db, 'quotes', q.id), q);
+          });
+          // Seed invoices
+          initialInvoices.forEach((inv) => {
+            batch.set(doc(db, 'invoices', inv.id), inv);
+          });
+          // Seed clients
+          initialClients.forEach((cl) => {
+            batch.set(doc(db, 'clients', cl.id), cl);
+          });
+          // Seed maintenance
+          initialMaintenanceRecords.forEach((m) => {
+            batch.set(doc(db, 'maintenance', m.id), m);
+          });
+          // Seed settings
+          batch.set(doc(db, 'settings', 'company'), initialCompanySettings);
+
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn('Initial Firestore seed check:', err);
+      }
+    };
+
+    checkAndSeedCollection();
+
+    // 1. Inventory Listener
+    const invUnsub = onSnapshot(
+      collection(db, 'inventory'),
+      (snap) => {
+        if (!snap.empty) {
+          const items: InventoryItem[] = [];
+          snap.forEach((d) => items.push(d.data() as InventoryItem));
+          setInventory(items);
+        }
+        setIsCloudSynced(true);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'inventory');
+      }
+    );
+    unsubscribers.push(invUnsub);
+
+    // 2. Staff Listener
+    const staffUnsub = onSnapshot(
+      collection(db, 'staff'),
+      (snap) => {
+        if (!snap.empty) {
+          const items: StaffMember[] = [];
+          snap.forEach((d) => items.push(d.data() as StaffMember));
+          setStaff(items);
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'staff');
+      }
+    );
+    unsubscribers.push(staffUnsub);
+
+    // 3. Shifts Listener
+    const shiftsUnsub = onSnapshot(
+      collection(db, 'shifts'),
+      (snap) => {
+        if (!snap.empty) {
+          const items: LaborShift[] = [];
+          snap.forEach((d) => items.push(d.data() as LaborShift));
+          setShifts(items);
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'shifts');
+      }
+    );
+    unsubscribers.push(shiftsUnsub);
+
+    // 4. Quotes Listener
+    const quotesUnsub = onSnapshot(
+      collection(db, 'quotes'),
+      (snap) => {
+        if (!snap.empty) {
+          const items: ClientQuote[] = [];
+          snap.forEach((d) => items.push(d.data() as ClientQuote));
+          setQuotes(items);
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'quotes');
+      }
+    );
+    unsubscribers.push(quotesUnsub);
+
+    // 5. Invoices Listener
+    const invsUnsub = onSnapshot(
+      collection(db, 'invoices'),
+      (snap) => {
+        if (!snap.empty) {
+          const items: Invoice[] = [];
+          snap.forEach((d) => items.push(d.data() as Invoice));
+          setInvoices(items);
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'invoices');
+      }
+    );
+    unsubscribers.push(invsUnsub);
+
+    // 6. Clients Listener
+    const clientsUnsub = onSnapshot(
+      collection(db, 'clients'),
+      (snap) => {
+        if (!snap.empty) {
+          const items: Client[] = [];
+          snap.forEach((d) => items.push(d.data() as Client));
+          setClients(items);
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'clients');
+      }
+    );
+    unsubscribers.push(clientsUnsub);
+
+    // 7. Maintenance Listener
+    const maintUnsub = onSnapshot(
+      collection(db, 'maintenance'),
+      (snap) => {
+        if (!snap.empty) {
+          const items: MaintenanceRecord[] = [];
+          snap.forEach((d) => items.push(d.data() as MaintenanceRecord));
+          setMaintenanceRecords(items);
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'maintenance');
+      }
+    );
+    unsubscribers.push(maintUnsub);
+
+    // 8. Settings Listener
+    const settingsUnsub = onSnapshot(
+      doc(db, 'settings', 'company'),
+      (snap) => {
+        if (snap.exists()) {
+          setSettings(snap.data() as CompanySettings);
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'settings/company');
+      }
+    );
+    unsubscribers.push(settingsUnsub);
+
+    return () => {
+      unsubscribers.forEach((fn) => fn());
+    };
+  }, [currentUser]);
+
+  // Sync to localStorage as offline fallback cache
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_PREFIX}inventory`, JSON.stringify(inventory));
+  }, [inventory]);
+
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_PREFIX}staff`, JSON.stringify(staff));
+  }, [staff]);
+
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_PREFIX}shifts`, JSON.stringify(shifts));
+  }, [shifts]);
+
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_PREFIX}quotes`, JSON.stringify(quotes));
+  }, [quotes]);
+
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_PREFIX}invoices`, JSON.stringify(invoices));
+  }, [invoices]);
+
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_PREFIX}clients`, JSON.stringify(clients));
+  }, [clients]);
+
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_PREFIX}maintenance`, JSON.stringify(maintenanceRecords));
+  }, [maintenanceRecords]);
+
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_PREFIX}settings`, JSON.stringify(settings));
+  }, [settings]);
+
+  // Google Sign-in with Popup
+  const signInWithGoogle = async () => {
+    try {
+      setAuthLoading(true);
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      console.error('Sign-in error:', err);
+      setAuthLoading(false);
+      throw err;
+    }
+  };
+
+  // Sign out
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      setCurrentUser(null);
+      setIsCloudSynced(false);
+    } catch (err) {
+      console.error('Sign-out error:', err);
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // Inventory actions
+  // --------------------------------------------------------------------------
+  const addInventoryItem = async (item: Omit<InventoryItem, 'id'>) => {
+    const id = `inv-${Date.now().toString(36)}`;
+    const newItem: InventoryItem = { ...item, id };
+    setInventory((prev) => [newItem, ...prev]);
+
+    if (currentUser) {
+      const path = `inventory/${id}`;
+      try {
+        await setDoc(doc(db, 'inventory', id), newItem);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, path);
+      }
+    }
+  };
+
+  const updateInventoryItem = async (id: string, updates: Partial<InventoryItem>) => {
+    setInventory((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
+    );
+
+    if (currentUser) {
+      const path = `inventory/${id}`;
+      try {
+        await updateDoc(doc(db, 'inventory', id), updates);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, path);
+      }
+    }
+  };
+
+  const deleteInventoryItem = async (id: string) => {
+    setInventory((prev) => prev.filter((item) => item.id !== id));
+
+    if (currentUser) {
+      const path = `inventory/${id}`;
+      try {
+        await deleteDoc(doc(db, 'inventory', id));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
+    }
+  };
+
+  const setItemMaintenanceStatus = async (
+    id: string,
+    status: ItemStatus,
+    inRepairCount?: number
+  ) => {
+    const target = inventory.find((i) => i.id === id);
+    if (!target) return;
+
+    const newRepairQty =
+      inRepairCount !== undefined
+        ? inRepairCount
+        : status === 'In Maintenance'
+        ? Math.max(1, target.inRepairQuantity || 1)
+        : 0;
+
+    const newAvail = Math.max(0, target.totalQuantity - target.onRentQuantity - newRepairQty);
+
+    const updates = {
+      status,
+      inRepairQuantity: newRepairQty,
+      availableQuantity: newAvail,
+    };
+
+    await updateInventoryItem(id, updates);
+  };
+
+  // --------------------------------------------------------------------------
+  // Staff & Scheduling actions
+  // --------------------------------------------------------------------------
+  const addStaffMember = async (member: Omit<StaffMember, 'id'>) => {
+    const id = `staff-${Date.now().toString(36)}`;
+    const newMember: StaffMember = { ...member, id };
+    setStaff((prev) => [newMember, ...prev]);
+
+    if (currentUser) {
+      const path = `staff/${id}`;
+      try {
+        await setDoc(doc(db, 'staff', id), newMember);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, path);
+      }
+    }
+  };
+
+  const updateStaffMember = async (id: string, updates: Partial<StaffMember>) => {
+    setStaff((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
+    );
+
+    if (currentUser) {
+      const path = `staff/${id}`;
+      try {
+        await updateDoc(doc(db, 'staff', id), updates);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, path);
+      }
+    }
+  };
+
+  const deleteStaffMember = async (id: string) => {
+    setStaff((prev) => prev.filter((item) => item.id !== id));
+
+    if (currentUser) {
+      const path = `staff/${id}`;
+      try {
+        await deleteDoc(doc(db, 'staff', id));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
+    }
+  };
+
+  const addShift = async (shift: Omit<LaborShift, 'id'>) => {
+    const id = `shift-${Date.now().toString(36)}`;
+    const newShift: LaborShift = { ...shift, id };
+    setShifts((prev) => [newShift, ...prev]);
+
+    if (currentUser) {
+      const path = `shifts/${id}`;
+      try {
+        await setDoc(doc(db, 'shifts', id), newShift);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, path);
+      }
+    }
+  };
+
+  const updateShift = async (id: string, updates: Partial<LaborShift>) => {
+    setShifts((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
+    );
+
+    if (currentUser) {
+      const path = `shifts/${id}`;
+      try {
+        await updateDoc(doc(db, 'shifts', id), updates);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, path);
+      }
+    }
+  };
+
+  const deleteShift = async (id: string) => {
+    setShifts((prev) => prev.filter((item) => item.id !== id));
+
+    if (currentUser) {
+      const path = `shifts/${id}`;
+      try {
+        await deleteDoc(doc(db, 'shifts', id));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // Quotes actions
+  // --------------------------------------------------------------------------
+  const addQuote = (quote: Omit<ClientQuote, 'id' | 'quoteNumber'>): string => {
+    const seq = quotes.length + 92;
+    const quoteNumber = `ITW-2026-${String(seq).padStart(3, '0')}`;
+    const id = `quote-${Date.now().toString(36)}`;
+    const newQuote: ClientQuote = {
+      ...quote,
+      id,
+      quoteNumber,
+    };
+    setQuotes((prev) => [newQuote, ...prev]);
+
+    if (currentUser) {
+      const path = `quotes/${id}`;
+      setDoc(doc(db, 'quotes', id), newQuote).catch((error) => {
+        handleFirestoreError(error, OperationType.CREATE, path);
+      });
+    }
+
+    return id;
+  };
+
+  const updateQuote = async (id: string, updates: Partial<ClientQuote>) => {
+    setQuotes((prev) =>
+      prev.map((quote) => (quote.id === id ? { ...quote, ...updates } : quote))
+    );
+
+    if (currentUser) {
+      const path = `quotes/${id}`;
+      try {
+        await updateDoc(doc(db, 'quotes', id), updates);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, path);
+      }
+    }
+  };
+
+  const deleteQuote = async (id: string) => {
+    setQuotes((prev) => prev.filter((item) => item.id !== id));
+
+    if (currentUser) {
+      const path = `quotes/${id}`;
+      try {
+        await deleteDoc(doc(db, 'quotes', id));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
+    }
+  };
+
+  const updateQuoteStatus = async (id: string, status: QuoteStatus) => {
+    await updateQuote(id, { status });
+  };
+
+  const convertQuoteToActiveJob = async (id: string) => {
+    const quote = quotes.find((q) => q.id === id);
+    if (!quote) return;
+
+    await updateQuote(id, { status: 'Approved', termsAccepted: true });
+
+    // Deduct available gear & record on-rent
+    for (const item of quote.equipmentItems) {
+      const inv = inventory.find((i) => i.id === item.inventoryId);
+      if (inv) {
+        const newOnRent = inv.onRentQuantity + item.quantity;
+        const newAvail = Math.max(0, inv.totalQuantity - newOnRent - inv.inRepairQuantity);
+        await updateInventoryItem(inv.id, {
+          onRentQuantity: newOnRent,
+          availableQuantity: newAvail,
+        });
+      }
+    }
+  };
+
+  const updatePulledGearCount = async (
+    quoteId: string,
+    inventoryId: string,
+    count: number
+  ) => {
+    const quote = quotes.find((q) => q.id === quoteId);
+    if (!quote) return;
+
+    const currentMap = quote.pulledGearStatus || {};
+    const updatedStatus = {
+      ...currentMap,
+      [inventoryId]: count,
+    };
+
+    await updateQuote(quoteId, { pulledGearStatus: updatedStatus });
+  };
+
+  // --------------------------------------------------------------------------
+  // Invoices actions
+  // --------------------------------------------------------------------------
+  const createInvoiceFromQuote = (quoteId: string): string => {
+    const quote = quotes.find((q) => q.id === quoteId);
+    if (!quote) return '';
+
+    const seq = invoices.length + 92;
+    const invoiceNumber = `INV-2026-${String(seq).padStart(3, '0')}`;
+    const id = `inv-${Date.now().toString(36)}`;
+
+    const issueDate = new Date().toISOString().split('T')[0];
+    const dueDateObj = new Date();
+    dueDateObj.setDate(dueDateObj.getDate() + 30);
+    const dueDate = dueDateObj.toISOString().split('T')[0];
+
+    const newInvoice: Invoice = {
+      id,
+      invoiceNumber,
+      quoteId: quote.id,
+      quoteNumber: quote.quoteNumber,
+      clientId: quote.clientId,
+      clientName: quote.clientName,
+      clientCompany: quote.clientCompany,
+      clientEmail: quote.clientEmail,
+      clientPhone: quote.clientPhone,
+      eventName: quote.eventName,
+      venueName: quote.venueName,
+      issueDate,
+      dueDate,
+      equipmentSubtotal: quote.equipmentSubtotal,
+      laborSubtotal: quote.laborSubtotal,
+      logisticsFee: quote.logisticsFee,
+      damageWaiverAmount: quote.damageWaiverAmount,
+      taxAmount: quote.taxAmount,
+      totalAmount: quote.totalAmount,
+      paidAmount: 0,
+      balanceDue: quote.totalAmount,
+      paymentStatus: 'pending',
+      paymentTerms: 'Net 30',
+      payments: [],
+      notes: `Generated from accepted quote ${quote.quoteNumber}. Remittance via ACH / Wire Transfer.`,
+      createdAt: issueDate,
+    };
+
+    setInvoices((prev) => [newInvoice, ...prev]);
+    updateQuote(quote.id, { convertedToInvoiceId: id });
+
+    if (currentUser) {
+      const path = `invoices/${id}`;
+      setDoc(doc(db, 'invoices', id), newInvoice).catch((error) => {
+        handleFirestoreError(error, OperationType.CREATE, path);
+      });
+    }
+
+    return id;
+  };
+
+  const addInvoice = (invoice: Omit<Invoice, 'id' | 'invoiceNumber'>): string => {
+    const seq = invoices.length + 92;
+    const invoiceNumber = `INV-2026-${String(seq).padStart(3, '0')}`;
+    const id = `inv-${Date.now().toString(36)}`;
+    const newInvoice: Invoice = {
+      ...invoice,
+      id,
+      invoiceNumber,
+    };
+    setInvoices((prev) => [newInvoice, ...prev]);
+
+    if (currentUser) {
+      const path = `invoices/${id}`;
+      setDoc(doc(db, 'invoices', id), newInvoice).catch((error) => {
+        handleFirestoreError(error, OperationType.CREATE, path);
+      });
+    }
+
+    return id;
+  };
+
+  const updateInvoice = async (id: string, updates: Partial<Invoice>) => {
+    setInvoices((prev) =>
+      prev.map((inv) => (inv.id === id ? { ...inv, ...updates } : inv))
+    );
+
+    if (currentUser) {
+      const path = `invoices/${id}`;
+      try {
+        await updateDoc(doc(db, 'invoices', id), updates);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, path);
+      }
+    }
+  };
+
+  const deleteInvoice = async (id: string) => {
+    setInvoices((prev) => prev.filter((item) => item.id !== id));
+
+    if (currentUser) {
+      const path = `invoices/${id}`;
+      try {
+        await deleteDoc(doc(db, 'invoices', id));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
+    }
+  };
+
+  const recordPayment = async (
+    invoiceId: string,
+    payment: Omit<PaymentRecord, 'id'>
+  ) => {
+    const invoice = invoices.find((i) => i.id === invoiceId);
+    if (!invoice) return;
+
+    const newPaymentRecord: PaymentRecord = {
+      ...payment,
+      id: `pay-${Date.now().toString(36)}`,
+    };
+
+    const newPaidAmount = Number((invoice.paidAmount + payment.amount).toFixed(2));
+    const newBalanceDue = Math.max(0, Number((invoice.totalAmount - newPaidAmount).toFixed(2)));
+
+    let newStatus: Invoice['paymentStatus'] = invoice.paymentStatus;
+    if (newBalanceDue === 0) {
+      newStatus = 'paid';
+    } else if (newPaidAmount > 0) {
+      newStatus = 'partial';
+    }
+
+    const updates: Partial<Invoice> = {
+      paidAmount: newPaidAmount,
+      balanceDue: newBalanceDue,
+      paymentStatus: newStatus,
+      payments: [...(invoice.payments || []), newPaymentRecord],
+    };
+
+    await updateInvoice(invoiceId, updates);
+  };
+
+  // --------------------------------------------------------------------------
+  // Clients CRM actions
+  // --------------------------------------------------------------------------
+  const addClient = (client: Omit<Client, 'id' | 'createdAt'>): string => {
+    const id = `cli-${Date.now().toString(36)}`;
+    const newClient: Client = {
+      ...client,
+      id,
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+    setClients((prev) => [newClient, ...prev]);
+
+    if (currentUser) {
+      const path = `clients/${id}`;
+      setDoc(doc(db, 'clients', id), newClient).catch((error) => {
+        handleFirestoreError(error, OperationType.CREATE, path);
+      });
+    }
+
+    return id;
+  };
+
+  const updateClient = async (id: string, updates: Partial<Client>) => {
+    setClients((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...updates } : c))
+    );
+
+    if (currentUser) {
+      const path = `clients/${id}`;
+      try {
+        await updateDoc(doc(db, 'clients', id), updates);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, path);
+      }
+    }
+  };
+
+  const deleteClient = async (id: string) => {
+    setClients((prev) => prev.filter((c) => c.id !== id));
+
+    if (currentUser) {
+      const path = `clients/${id}`;
+      try {
+        await deleteDoc(doc(db, 'clients', id));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // Maintenance actions
+  // --------------------------------------------------------------------------
+  const addMaintenanceRecord = async (
+    record: Omit<MaintenanceRecord, 'id' | 'dateLogged'>
+  ) => {
+    const id = `maint-${Date.now().toString(36)}`;
+    const newRecord: MaintenanceRecord = {
+      ...record,
+      id,
+      dateLogged: new Date().toISOString().split('T')[0],
+    };
+    setMaintenanceRecords((prev) => [newRecord, ...prev]);
+
+    if (currentUser) {
+      const path = `maintenance/${id}`;
+      try {
+        await setDoc(doc(db, 'maintenance', id), newRecord);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, path);
+      }
+    }
+
+    if (newRecord.status === 'In Progress') {
+      await setItemMaintenanceStatus(newRecord.inventoryItemId, 'In Maintenance');
+    }
+  };
+
+  const updateMaintenanceRecord = async (
+    id: string,
+    updates: Partial<MaintenanceRecord>
+  ) => {
+    setMaintenanceRecords((prev) =>
+      prev.map((rec) => (rec.id === id ? { ...rec, ...updates } : rec))
+    );
+
+    if (currentUser) {
+      const path = `maintenance/${id}`;
+      try {
+        await updateDoc(doc(db, 'maintenance', id), updates);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, path);
+      }
+    }
+  };
+
+  const completeMaintenanceRecord = async (
+    id: string,
+    resolutionNotes: string,
+    cost?: number
+  ) => {
+    const record = maintenanceRecords.find((r) => r.id === id);
+    if (!record) return;
+
+    const updates: Partial<MaintenanceRecord> = {
+      status: 'Completed',
+      completedDate: new Date().toISOString().split('T')[0],
+      resolutionNotes,
+      cost: cost !== undefined ? cost : record.cost,
+    };
+
+    await updateMaintenanceRecord(id, updates);
+    await setItemMaintenanceStatus(record.inventoryItemId, 'Available', 0);
+  };
+
+  const deleteMaintenanceRecord = async (id: string) => {
+    setMaintenanceRecords((prev) => prev.filter((r) => r.id !== id));
+
+    if (currentUser) {
+      const path = `maintenance/${id}`;
+      try {
+        await deleteDoc(doc(db, 'maintenance', id));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // Settings actions
+  // --------------------------------------------------------------------------
+  const updateSettings = async (newSettings: Partial<CompanySettings>) => {
+    const updated = { ...settings, ...newSettings };
+    setSettings(updated);
+
+    if (currentUser) {
+      const path = 'settings/company';
+      try {
+        await setDoc(doc(db, 'settings', 'company'), updated);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, path);
+      }
+    }
+  };
+
+  const resetAllData = async () => {
+    setInventory(initialInventory);
+    setStaff(initialStaff);
+    setShifts(initialShifts);
+    setQuotes(initialQuotes);
+    setInvoices(initialInvoices);
+    setClients(initialClients);
+    setMaintenanceRecords(initialMaintenanceRecords);
+    setSettings(initialCompanySettings);
+
+    localStorage.removeItem(`${STORAGE_PREFIX}inventory`);
+    localStorage.removeItem(`${STORAGE_PREFIX}staff`);
+    localStorage.removeItem(`${STORAGE_PREFIX}shifts`);
+    localStorage.removeItem(`${STORAGE_PREFIX}quotes`);
+    localStorage.removeItem(`${STORAGE_PREFIX}invoices`);
+    localStorage.removeItem(`${STORAGE_PREFIX}clients`);
+    localStorage.removeItem(`${STORAGE_PREFIX}maintenance`);
+    localStorage.removeItem(`${STORAGE_PREFIX}settings`);
+
+    if (currentUser) {
+      try {
+        const batch = writeBatch(db);
+        initialInventory.forEach((item) => batch.set(doc(db, 'inventory', item.id), item));
+        initialStaff.forEach((st) => batch.set(doc(db, 'staff', st.id), st));
+        initialShifts.forEach((sh) => batch.set(doc(db, 'shifts', sh.id), sh));
+        initialQuotes.forEach((q) => batch.set(doc(db, 'quotes', q.id), q));
+        initialInvoices.forEach((inv) => batch.set(doc(db, 'invoices', inv.id), inv));
+        initialClients.forEach((cl) => batch.set(doc(db, 'clients', cl.id), cl));
+        initialMaintenanceRecords.forEach((m) => batch.set(doc(db, 'maintenance', m.id), m));
+        batch.set(doc(db, 'settings', 'company'), initialCompanySettings);
+        await batch.commit();
+      } catch (error) {
+        console.warn('Batch reset Firestore error:', error);
+      }
+    }
+  };
+
+  return (
+    <AppContext.Provider
+      value={{
+        activeTab,
+        setActiveTab,
+
+        currentUser,
+        authLoading,
+        isCloudSynced,
+        signInWithGoogle,
+        logout,
+
+        inventory,
+        addInventoryItem,
+        updateInventoryItem,
+        deleteInventoryItem,
+        setItemMaintenanceStatus,
+
+        staff,
+        addStaffMember,
+        updateStaffMember,
+        deleteStaffMember,
+
+        shifts,
+        addShift,
+        updateShift,
+        deleteShift,
+
+        quotes,
+        addQuote,
+        updateQuote,
+        deleteQuote,
+        updateQuoteStatus,
+        convertQuoteToActiveJob,
+        updatePulledGearCount,
+
+        invoices,
+        createInvoiceFromQuote,
+        addInvoice,
+        updateInvoice,
+        deleteInvoice,
+        recordPayment,
+
+        clients,
+        addClient,
+        updateClient,
+        deleteClient,
+        selectedClientForDetail,
+        setSelectedClientForDetail,
+
+        maintenanceRecords,
+        addMaintenanceRecord,
+        updateMaintenanceRecord,
+        completeMaintenanceRecord,
+        deleteMaintenanceRecord,
+
+        settings,
+        updateSettings,
+        resetAllData,
+
+        activeQuoteForPrint,
+        setActiveQuoteForPrint,
+        activeInvoiceForPrint,
+        setActiveInvoiceForPrint,
+        selectedQuoteForPull,
+        setSelectedQuoteForPull,
+      }}
+    >
+      {children}
+    </AppContext.Provider>
+  );
+};
+
+export const useApp = () => {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useApp must be used within an AppProvider');
+  }
+  return context;
+};

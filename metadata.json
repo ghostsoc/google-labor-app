@@ -1,0 +1,6 @@
+{
+  "name": "In The Wind AV - Production Rental & Labor Manager",
+  "description": "Professional live event AV rental management, inventory tracking, crew labor scheduling, and seamless client quote generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

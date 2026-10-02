@@ -1,0 +1,264 @@
+{
+  "entities": {
+    "user": {
+      "title": "User Profile",
+      "description": "Authenticated crew member or operations administrator",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "photoURL": { "type": "string", "maxLength": 1024 },
+        "role": { "type": "string", "enum": ["Admin", "Lead Engineer", "Technician", "Warehouse Manager"] },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["uid", "email"]
+    },
+    "inventoryItem": {
+      "title": "Inventory Item",
+      "description": "AV equipment asset in rental catalog",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "sku": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 256 },
+        "category": { "type": "string", "enum": ["Audio", "Video", "Lighting", "Rigging & Power", "Staging & Truss", "Cables & Comms"] },
+        "subcategory": { "type": "string", "maxLength": 128 },
+        "model": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["Available", "In Maintenance", "Decommissioned"] },
+        "totalQuantity": { "type": "number" },
+        "availableQuantity": { "type": "number" },
+        "onRentQuantity": { "type": "number" },
+        "inRepairQuantity": { "type": "number" },
+        "dayRate": { "type": "number" },
+        "weekRate": { "type": "number" },
+        "replacementCost": { "type": "number" },
+        "locationBin": { "type": "string", "maxLength": 128 },
+        "barcode": { "type": "string", "maxLength": 64 },
+        "powerWatts": { "type": "number" },
+        "weightLbs": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 2048 },
+        "lastServiceDate": { "type": "string", "maxLength": 64 },
+        "nextServiceDueDate": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["sku", "name", "category", "totalQuantity", "availableQuantity", "dayRate"]
+    },
+    "clientQuote": {
+      "title": "Client Quote & Production Event",
+      "description": "AV rental quote, booked show details, gear manifest and labor crew",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "quoteNumber": { "type": "string", "maxLength": 64 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 128 },
+        "clientCompany": { "type": "string", "maxLength": 128 },
+        "clientEmail": { "type": "string", "maxLength": 256 },
+        "clientPhone": { "type": "string", "maxLength": 64 },
+        "eventName": { "type": "string", "maxLength": 256 },
+        "venueName": { "type": "string", "maxLength": 256 },
+        "venueAddress": { "type": "string", "maxLength": 512 },
+        "loadInDate": { "type": "string", "maxLength": 64 },
+        "showStartDate": { "type": "string", "maxLength": 64 },
+        "showEndDate": { "type": "string", "maxLength": 64 },
+        "strikeDate": { "type": "string", "maxLength": 64 },
+        "equipmentItems": { "type": "array" },
+        "laborItems": { "type": "array" },
+        "logisticsFee": { "type": "number" },
+        "damageWaiverPercent": { "type": "number" },
+        "taxPercent": { "type": "number" },
+        "clientDiscountPercent": { "type": "number" },
+        "equipmentSubtotal": { "type": "number" },
+        "laborSubtotal": { "type": "number" },
+        "damageWaiverAmount": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "estimatedLaborCost": { "type": "number" },
+        "status": { "type": "string", "enum": ["Draft", "Sent", "Approved", "Declined", "Completed"] },
+        "termsAccepted": { "type": "boolean" },
+        "clientNotes": { "type": "string", "maxLength": 2048 },
+        "internalNotes": { "type": "string", "maxLength": 2048 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "validUntil": { "type": "string", "maxLength": 64 },
+        "convertedToInvoiceId": { "type": "string", "maxLength": 128 },
+        "pulledGearStatus": { "type": "object" }
+      },
+      "required": ["quoteNumber", "eventName", "venueName", "totalAmount", "status"]
+    },
+    "laborShift": {
+      "title": "Labor Shift Call",
+      "description": "Crew member dispatched shift call for show, setup or strike",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "quoteId": { "type": "string", "maxLength": 128 },
+        "eventName": { "type": "string", "maxLength": 256 },
+        "staffId": { "type": "string", "maxLength": 128 },
+        "staffName": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "maxLength": 64 },
+        "startTime": { "type": "string", "maxLength": 32 },
+        "endTime": { "type": "string", "maxLength": 32 },
+        "callType": { "type": "string", "maxLength": 64 },
+        "rateType": { "type": "string", "enum": ["Day Rate", "Hourly"] },
+        "rate": { "type": "number" },
+        "hours": { "type": "number" },
+        "status": { "type": "string", "enum": ["Draft", "Offered", "Confirmed", "Completed", "Declined"] },
+        "venue": { "type": "string", "maxLength": 256 },
+        "notes": { "type": "string", "maxLength": 2048 }
+      },
+      "required": ["eventName", "staffName", "role", "date", "startTime", "endTime", "rate", "hours", "status"]
+    },
+    "invoice": {
+      "title": "Client Invoice",
+      "description": "Billed commercial production invoice and payment tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "invoiceNumber": { "type": "string", "maxLength": 64 },
+        "quoteId": { "type": "string", "maxLength": 128 },
+        "quoteNumber": { "type": "string", "maxLength": 64 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 128 },
+        "clientCompany": { "type": "string", "maxLength": 128 },
+        "clientEmail": { "type": "string", "maxLength": 256 },
+        "clientPhone": { "type": "string", "maxLength": 64 },
+        "eventName": { "type": "string", "maxLength": 256 },
+        "venueName": { "type": "string", "maxLength": 256 },
+        "issueDate": { "type": "string", "maxLength": 64 },
+        "dueDate": { "type": "string", "maxLength": 64 },
+        "equipmentSubtotal": { "type": "number" },
+        "laborSubtotal": { "type": "number" },
+        "logisticsFee": { "type": "number" },
+        "damageWaiverAmount": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "balanceDue": { "type": "number" },
+        "paymentStatus": { "type": "string", "enum": ["pending", "partial", "paid", "overdue"] },
+        "paymentTerms": { "type": "string", "maxLength": 64 },
+        "payments": { "type": "array" },
+        "notes": { "type": "string", "maxLength": 2048 }
+      },
+      "required": ["invoiceNumber", "eventName", "issueDate", "dueDate", "totalAmount", "paidAmount", "balanceDue", "paymentStatus"]
+    },
+    "client": {
+      "title": "Client Account",
+      "description": "Production client company and contact profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "company": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "phone": { "type": "string", "maxLength": 64 },
+        "address": { "type": "string", "maxLength": 512 },
+        "billingTerms": { "type": "string", "enum": ["Due on Receipt", "Net 15", "Net 30", "50% Advance / Net 15", "COD"] },
+        "taxExempt": { "type": "boolean" },
+        "taxExemptNumber": { "type": "string", "maxLength": 64 },
+        "preferences": { "type": "string", "maxLength": 2048 },
+        "notes": { "type": "string", "maxLength": 2048 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["name", "email", "billingTerms"]
+    },
+    "maintenanceRecord": {
+      "title": "Maintenance Ticket",
+      "description": "Equipment servicing log, repair, and safety inspection",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "inventoryItemId": { "type": "string", "maxLength": 128 },
+        "inventoryItemName": { "type": "string", "maxLength": 256 },
+        "sku": { "type": "string", "maxLength": 64 },
+        "dateLogged": { "type": "string", "maxLength": 64 },
+        "scheduledDate": { "type": "string", "maxLength": 64 },
+        "completedDate": { "type": "string", "maxLength": 64 },
+        "type": { "type": "string", "enum": ["Routine Inspection", "Driver / Transducer Repair", "Cable Loom Testing", "Optics & Lamp Cleaning", "Firmware / Software Update", "Hoist Load Testing / Recertification", "Cosmetic / Case Repair"] },
+        "status": { "type": "string", "enum": ["Scheduled", "In Progress", "Completed", "Decommissioned"] },
+        "serviceVendor": { "type": "string", "maxLength": 128 },
+        "technician": { "type": "string", "maxLength": 128 },
+        "cost": { "type": "number" },
+        "issueDescription": { "type": "string", "maxLength": 2048 },
+        "resolutionNotes": { "type": "string", "maxLength": 2048 },
+        "nextServiceDueDate": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["inventoryItemId", "inventoryItemName", "sku", "dateLogged", "type", "status", "issueDescription"]
+    },
+    "companySettings": {
+      "title": "Company Profile & Terms",
+      "description": "AV rental company operational defaults and terms",
+      "type": "object",
+      "properties": {
+        "companyName": { "type": "string", "maxLength": 128 },
+        "tagline": { "type": "string", "maxLength": 256 },
+        "address": { "type": "string", "maxLength": 512 },
+        "phone": { "type": "string", "maxLength": 64 },
+        "email": { "type": "string", "maxLength": 256 },
+        "website": { "type": "string", "maxLength": 256 },
+        "defaultTaxRate": { "type": "number" },
+        "defaultDamageWaiver": { "type": "number" },
+        "currencySymbol": { "type": "string", "maxLength": 8 },
+        "termsAndConditions": { "type": "string", "maxLength": 10000 }
+      },
+      "required": ["companyName", "defaultTaxRate", "defaultDamageWaiver", "currencySymbol"]
+    },
+    "staffMember": {
+      "title": "Crew Technician",
+      "description": "Certified AV crew roster technician and operator",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "phone": { "type": "string", "maxLength": 64 },
+        "dayRate": { "type": "number" },
+        "hourlyRate": { "type": "number" },
+        "skills": { "type": "array" },
+        "avatarUrl": { "type": "string", "maxLength": 1024 },
+        "status": { "type": "string", "enum": ["Available", "On Job", "Off Duty"] },
+        "notes": { "type": "string", "maxLength": 2048 }
+      },
+      "required": ["name", "role", "dayRate", "hourlyRate"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "User profile for authenticated crew members"
+    },
+    "/inventory/{itemId}": {
+      "schema": "inventoryItem",
+      "description": "Fleet equipment inventory assets"
+    },
+    "/staff/{staffId}": {
+      "schema": "staffMember",
+      "description": "Crew roster technicians and engineers"
+    },
+    "/quotes/{quoteId}": {
+      "schema": "clientQuote",
+      "description": "Client proposals, event bookings and pull sheets"
+    },
+    "/shifts/{shiftId}": {
+      "schema": "laborShift",
+      "description": "Crew member shift dispatch calls"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": "invoice",
+      "description": "Client invoices and payment receipts"
+    },
+    "/clients/{clientId}": {
+      "schema": "client",
+      "description": "Client directory and technical preferences"
+    },
+    "/maintenance/{recordId}": {
+      "schema": "maintenanceRecord",
+      "description": "Equipment maintenance logs and repairs"
+    },
+    "/settings/{settingsId}": {
+      "schema": "companySettings",
+      "description": "Company operational configuration"
+    }
+  }
+}

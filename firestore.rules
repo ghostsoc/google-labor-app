@@ -1,0 +1,194 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.uid is string && data.uid.size() <= 128 && data.uid == request.auth.uid
+          && data.email is string && data.email.size() <= 256;
+      }
+
+      allow get: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if isVerifiedUser() && resource.data.uid == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId && isValidUser(incoming());
+      allow update: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId && isValidUser(incoming())
+        && incoming().uid == existing().uid;
+      allow delete: if false;
+    }
+
+    // Inventory Collection
+    match /inventory/{itemId} {
+      function isValidInventory(data) {
+        return data.sku is string && data.sku.size() <= 64
+          && data.name is string && data.name.size() <= 256
+          && data.category is string && data.category.size() <= 64
+          && data.totalQuantity is number && data.totalQuantity >= 0
+          && data.availableQuantity is number && data.availableQuantity >= 0
+          && data.dayRate is number && data.dayRate >= 0;
+      }
+
+      allow get: if isVerifiedUser() && isValidId(itemId);
+      allow list: if isVerifiedUser();
+      allow create: if isVerifiedUser() && isValidId(itemId) && isValidInventory(incoming());
+      allow update: if isVerifiedUser() && isValidId(itemId) && isValidInventory(incoming());
+      allow delete: if isVerifiedUser() && isValidId(itemId);
+    }
+
+    // Staff Crew Members Collection
+    match /staff/{staffId} {
+      function isValidStaff(data) {
+        return data.name is string && data.name.size() <= 128
+          && data.role is string && data.role.size() <= 128
+          && data.dayRate is number && data.dayRate >= 0
+          && data.hourlyRate is number && data.hourlyRate >= 0;
+      }
+
+      allow get: if isVerifiedUser() && isValidId(staffId);
+      allow list: if isVerifiedUser();
+      allow create: if isVerifiedUser() && isValidId(staffId) && isValidStaff(incoming());
+      allow update: if isVerifiedUser() && isValidId(staffId) && isValidStaff(incoming());
+      allow delete: if isVerifiedUser() && isValidId(staffId);
+    }
+
+    // Quotes & Booked Events Collection
+    match /quotes/{quoteId} {
+      function isValidQuote(data) {
+        return data.quoteNumber is string && data.quoteNumber.size() <= 64
+          && data.eventName is string && data.eventName.size() <= 256
+          && data.venueName is string && data.venueName.size() <= 256
+          && data.totalAmount is number && data.totalAmount >= 0
+          && data.status is string && data.status.size() <= 32;
+      }
+
+      allow get: if isVerifiedUser() && isValidId(quoteId);
+      allow list: if isVerifiedUser();
+      allow create: if isVerifiedUser() && isValidId(quoteId) && isValidQuote(incoming());
+      allow update: if isVerifiedUser() && isValidId(quoteId) && isValidQuote(incoming());
+      allow delete: if isVerifiedUser() && isValidId(quoteId);
+    }
+
+    // Labor Shifts Collection
+    match /shifts/{shiftId} {
+      function isValidShift(data) {
+        return data.eventName is string && data.eventName.size() <= 256
+          && data.staffName is string && data.staffName.size() <= 128
+          && data.role is string && data.role.size() <= 128
+          && data.date is string && data.date.size() <= 64
+          && data.startTime is string && data.startTime.size() <= 32
+          && data.endTime is string && data.endTime.size() <= 32
+          && data.rate is number && data.rate >= 0
+          && data.hours is number && data.hours >= 0
+          && data.status is string && data.status.size() <= 32;
+      }
+
+      allow get: if isVerifiedUser() && isValidId(shiftId);
+      allow list: if isVerifiedUser();
+      allow create: if isVerifiedUser() && isValidId(shiftId) && isValidShift(incoming());
+      allow update: if isVerifiedUser() && isValidId(shiftId) && isValidShift(incoming());
+      allow delete: if isVerifiedUser() && isValidId(shiftId);
+    }
+
+    // Invoices Collection
+    match /invoices/{invoiceId} {
+      function isValidInvoice(data) {
+        return data.invoiceNumber is string && data.invoiceNumber.size() <= 64
+          && data.eventName is string && data.eventName.size() <= 256
+          && data.issueDate is string && data.issueDate.size() <= 64
+          && data.dueDate is string && data.dueDate.size() <= 64
+          && data.totalAmount is number && data.totalAmount >= 0
+          && data.paidAmount is number && data.paidAmount >= 0
+          && data.balanceDue is number
+          && data.paymentStatus is string && data.paymentStatus.size() <= 32;
+      }
+
+      allow get: if isVerifiedUser() && isValidId(invoiceId);
+      allow list: if isVerifiedUser();
+      allow create: if isVerifiedUser() && isValidId(invoiceId) && isValidInvoice(incoming());
+      allow update: if isVerifiedUser() && isValidId(invoiceId) && isValidInvoice(incoming());
+      allow delete: if isVerifiedUser() && isValidId(invoiceId);
+    }
+
+    // Clients Collection
+    match /clients/{clientId} {
+      function isValidClient(data) {
+        return data.name is string && data.name.size() <= 128
+          && data.email is string && data.email.size() <= 256
+          && data.billingTerms is string && data.billingTerms.size() <= 64;
+      }
+
+      allow get: if isVerifiedUser() && isValidId(clientId);
+      allow list: if isVerifiedUser();
+      allow create: if isVerifiedUser() && isValidId(clientId) && isValidClient(incoming());
+      allow update: if isVerifiedUser() && isValidId(clientId) && isValidClient(incoming());
+      allow delete: if isVerifiedUser() && isValidId(clientId);
+    }
+
+    // Maintenance Records Collection
+    match /maintenance/{recordId} {
+      function isValidMaintenance(data) {
+        return data.inventoryItemId is string && data.inventoryItemId.size() <= 128
+          && data.inventoryItemName is string && data.inventoryItemName.size() <= 256
+          && data.sku is string && data.sku.size() <= 64
+          && data.dateLogged is string && data.dateLogged.size() <= 64
+          && data.type is string && data.type.size() <= 128
+          && data.status is string && data.status.size() <= 64
+          && data.issueDescription is string && data.issueDescription.size() <= 2048;
+      }
+
+      allow get: if isVerifiedUser() && isValidId(recordId);
+      allow list: if isVerifiedUser();
+      allow create: if isVerifiedUser() && isValidId(recordId) && isValidMaintenance(incoming());
+      allow update: if isVerifiedUser() && isValidId(recordId) && isValidMaintenance(incoming());
+      allow delete: if isVerifiedUser() && isValidId(recordId);
+    }
+
+    // Settings Collection
+    match /settings/{settingsId} {
+      function isValidSettings(data) {
+        return data.companyName is string && data.companyName.size() <= 128
+          && data.defaultTaxRate is number
+          && data.defaultDamageWaiver is number
+          && data.currencySymbol is string && data.currencySymbol.size() <= 8;
+      }
+
+      allow get: if isVerifiedUser() && isValidId(settingsId);
+      allow list: if isVerifiedUser();
+      allow create: if isVerifiedUser() && isValidId(settingsId) && isValidSettings(incoming());
+      allow update: if isVerifiedUser() && isValidId(settingsId) && isValidSettings(incoming());
+      allow delete: if false;
+    }
+
+    // Connection Health Check document
+    match /test/{testId} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}
