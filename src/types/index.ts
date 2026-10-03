@@ -60,6 +60,21 @@ export interface StaffMember {
   notes?: string;
 }
 
+export interface AssignedShiftEquipment {
+  id: string;
+  inventoryId: string;
+  name: string;
+  sku: string;
+  category: InventoryCategory;
+  quantity: number;
+  locationBin?: string;
+  barcode?: string;
+  stagedStatus: 'Pending Staging' | 'Staged / Checked Out' | 'Returned';
+  stagedAt?: string;
+  stagedBy?: string;
+  notes?: string;
+}
+
 export interface LaborShift {
   id: string;
   quoteId?: string;
@@ -77,6 +92,7 @@ export interface LaborShift {
   status: 'Draft' | 'Offered' | 'Confirmed' | 'Completed' | 'Declined';
   venue: string;
   notes?: string;
+  assignedEquipment?: AssignedShiftEquipment[];
 }
 
 export interface QuoteEquipmentItem {

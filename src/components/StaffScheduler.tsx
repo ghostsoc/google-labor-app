@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { StaffMember, LaborShift, CrewRole } from '../types';
+import { StaffMember, LaborShift, CrewRole, AssignedShiftEquipment } from '../types';
 import { LaborCostCalculatorModal } from './LaborCostCalculatorModal';
+import { ShiftGearAssignmentModal } from './ShiftGearAssignmentModal';
 import {
   Users,
   Calendar,
@@ -23,6 +24,7 @@ import {
   Calculator,
   ArrowRight,
   TrendingUp,
+  Package,
 } from 'lucide-react';
 
 interface StaffSchedulerProps {
@@ -38,18 +40,26 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
   initialPrefill,
   onClearPrefill,
 }) => {
-  const { staff, shifts, quotes, addStaffMember, addShift, updateShift, deleteShift, deleteStaffMember } = useApp();
+  const { staff, shifts, quotes, inventory, addStaffMember, addShift, updateShift, deleteShift, deleteStaffMember } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<'shifts' | 'roster'>('shifts');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState<string>('All');
   const [selectedEvent, setSelectedEvent] = useState<string>('All');
+  const [stagingFilter, setStagingFilter] = useState<'All' | 'Staged' | 'Pending Staging'>('All');
 
   // Modal States
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [callSheetEvent, setCallSheetEvent] = useState<string | null>(null);
+  const [selectedShiftForGear, setSelectedShiftForGear] = useState<LaborShift | null>(null);
+
+  // Keep selected shift synchronized with current state in shifts array
+  const currentActiveShiftForGear = useMemo(() => {
+    if (!selectedShiftForGear) return null;
+    return shifts.find((s) => s.id === selectedShiftForGear.id) || selectedShiftForGear;
+  }, [shifts, selectedShiftForGear]);
 
   // Helper to calculate hours between two times
   const calculateHoursFromTimes = (start: string, end: string): number => {
@@ -149,12 +159,23 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
       s.staffName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.eventName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.venue.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.role.toLowerCase().includes(searchQuery.toLowerCase());
+      s.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.assignedEquipment && s.assignedEquipment.some((eq) => eq.name.toLowerCase().includes(searchQuery.toLowerCase()) || eq.sku.toLowerCase().includes(searchQuery.toLowerCase())));
 
     const matchesRole = selectedRole === 'All' || s.role.includes(selectedRole);
     const matchesEvent = selectedEvent === 'All' || s.eventName === selectedEvent;
 
-    return matchesSearch && matchesRole && matchesEvent;
+    const matchesStaging =
+      stagingFilter === 'All' ||
+      (stagingFilter === 'Staged' &&
+        s.assignedEquipment &&
+        s.assignedEquipment.length > 0 &&
+        s.assignedEquipment.every((eq) => eq.stagedStatus === 'Staged / Checked Out')) ||
+      (stagingFilter === 'Pending Staging' &&
+        s.assignedEquipment &&
+        s.assignedEquipment.some((eq) => eq.stagedStatus === 'Pending Staging'));
+
+    return matchesSearch && matchesRole && matchesEvent && matchesStaging;
   });
 
   const filteredStaff = staff.filter((st) => {
@@ -382,6 +403,46 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
               </button>
             ))}
           </div>
+
+          {activeSubTab === 'shifts' && (
+            <div className="flex items-center gap-1 pl-1 border-l border-neutral-800">
+              <span className="text-[10px] text-neutral-500 uppercase font-mono px-1">Gear:</span>
+              <button
+                onClick={() => setStagingFilter('All')}
+                className={`px-2 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer ${
+                  stagingFilter === 'All'
+                    ? 'bg-neutral-800 text-white border border-neutral-700'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setStagingFilter('Pending Staging')}
+                className={`px-2 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
+                  stagingFilter === 'Pending Staging'
+                    ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+                title="Shifts with gear pending warehouse staging"
+              >
+                <Clock className="w-3 h-3 text-amber-400" />
+                <span>Needs Staging</span>
+              </button>
+              <button
+                onClick={() => setStagingFilter('Staged')}
+                className={`px-2 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
+                  stagingFilter === 'Staged'
+                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+                title="Shifts with all assigned gear staged"
+              >
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span>Fully Staged</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -396,91 +457,146 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
                   <th className="py-3 px-4">Production & Venue</th>
                   <th className="py-3 px-4">Technician</th>
                   <th className="py-3 px-4">Role & Call Scope</th>
+                  <th className="py-3 px-4">Assigned Gear & Staging</th>
                   <th className="py-3 px-4 text-right">Agreed Rate</th>
                   <th className="py-3 px-4 text-center">Status</th>
                   <th className="py-3 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800/70 text-neutral-200">
-                {filteredShifts.map((shift) => (
-                  <tr key={shift.id} className="hover:bg-neutral-800/30 transition-colors">
-                    {/* Date & Time */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <div className="font-bold text-white font-mono">{shift.date}</div>
-                      <div className="text-[11px] text-neutral-400 font-mono mt-0.5">
-                        {shift.startTime} – {shift.endTime} ({shift.hours}h)
-                      </div>
-                    </td>
+                {filteredShifts.map((shift) => {
+                  const gearList = shift.assignedEquipment || [];
+                  const totalUnits = gearList.reduce((sum, item) => sum + item.quantity, 0);
+                  const stagedUnits = gearList
+                    .filter((item) => item.stagedStatus === 'Staged / Checked Out')
+                    .reduce((sum, item) => sum + item.quantity, 0);
+                  const isAllStaged = gearList.length > 0 && stagedUnits === totalUnits;
 
-                    {/* Production & Venue */}
-                    <td className="py-3.5 px-4 max-w-xs">
-                      <div className="font-semibold text-white truncate">{shift.eventName}</div>
-                      <div className="text-[11px] text-neutral-400 truncate flex items-center gap-1 mt-0.5">
-                        <MapPin className="w-3 h-3 shrink-0" />
-                        <span>{shift.venue}</span>
-                      </div>
-                    </td>
+                  return (
+                    <tr key={shift.id} className="hover:bg-neutral-800/30 transition-colors">
+                      {/* Date & Time */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="font-bold text-white font-mono">{shift.date}</div>
+                        <div className="text-[11px] text-neutral-400 font-mono mt-0.5">
+                          {shift.startTime} – {shift.endTime} ({shift.hours}h)
+                        </div>
+                      </td>
 
-                    {/* Tech Name */}
-                    <td className="py-3.5 px-4 whitespace-nowrap font-medium text-white">
-                      {shift.staffName}
-                    </td>
+                      {/* Production & Venue */}
+                      <td className="py-3.5 px-4 max-w-xs">
+                        <div className="font-semibold text-white truncate">{shift.eventName}</div>
+                        <div className="text-[11px] text-neutral-400 truncate flex items-center gap-1 mt-0.5">
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          <span>{shift.venue}</span>
+                        </div>
+                      </td>
 
-                    {/* Role & Scope */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <div className="text-amber-400/90 font-medium">{shift.role}</div>
-                      <div className="text-[11px] text-neutral-400">{shift.callType}</div>
-                    </td>
+                      {/* Tech Name */}
+                      <td className="py-3.5 px-4 whitespace-nowrap font-medium text-white">
+                        {shift.staffName}
+                      </td>
 
-                    {/* Rate */}
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap font-mono tabular-nums font-semibold text-white">
-                      ${shift.rate}{' '}
-                      <span className="text-[10px] text-neutral-400 font-normal">
-                        ({shift.rateType})
-                      </span>
-                    </td>
+                      {/* Role & Scope */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="text-amber-400/90 font-medium">{shift.role}</div>
+                        <div className="text-[11px] text-neutral-400">{shift.callType}</div>
+                      </td>
 
-                    {/* Status */}
-                    <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-mono ${
-                          shift.status === 'Confirmed'
-                            ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/80'
-                            : shift.status === 'Offered'
-                            ? 'bg-amber-950 text-amber-300 border border-amber-800/80'
-                            : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
-                        }`}
-                      >
-                        {shift.status}
-                      </span>
-                    </td>
-
-                    {/* Action */}
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {shift.status !== 'Confirmed' && (
+                      {/* Assigned Gear & Staging */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {gearList.length > 0 ? (
                           <button
-                            onClick={() => updateShift(shift.id, { status: 'Confirmed' })}
-                            className="px-2 py-0.5 text-[11px] font-medium bg-emerald-950 text-emerald-300 border border-emerald-800/60 rounded hover:bg-emerald-900 transition-colors cursor-pointer"
+                            onClick={() => setSelectedShiftForGear(shift)}
+                            className="group text-left cursor-pointer"
                           >
-                            Confirm
+                            <div className="flex items-center gap-1.5">
+                              <Package className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
+                              <span className="font-semibold text-white group-hover:text-amber-300 transition-colors">
+                                {totalUnits} Units ({gearList.length} Items)
+                              </span>
+                            </div>
+                            <div className="mt-1">
+                              {isAllStaged ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                  <span>Fully Staged</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">
+                                  <Clock className="w-3 h-3 text-amber-400" />
+                                  <span>Staging {stagedUnits}/{totalUnits}</span>
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setSelectedShiftForGear(shift)}
+                            className="inline-flex items-center gap-1 text-[11px] text-neutral-400 hover:text-amber-400 py-1 px-2 rounded hover:bg-neutral-800/80 border border-dashed border-neutral-700 hover:border-amber-400/50 transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Assign Gear</span>
                           </button>
                         )}
-                        <button
-                          onClick={() => deleteShift(shift.id)}
-                          title="Cancel Shift"
-                          className="p-1 text-neutral-400 hover:text-rose-400 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                      </td>
+
+                      {/* Rate */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap font-mono tabular-nums font-semibold text-white">
+                        ${shift.rate}{' '}
+                        <span className="text-[10px] text-neutral-400 font-normal">
+                          ({shift.rateType})
+                        </span>
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-mono ${
+                            shift.status === 'Confirmed'
+                              ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/80'
+                              : shift.status === 'Offered'
+                              ? 'bg-amber-950 text-amber-300 border border-amber-800/80'
+                              : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
+                          }`}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {shift.status}
+                        </span>
+                      </td>
+
+                      {/* Action */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setSelectedShiftForGear(shift)}
+                            title="Assign & Stage Equipment"
+                            className="p-1 text-neutral-400 hover:text-amber-400 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                          >
+                            <Package className="w-3.5 h-3.5" />
+                          </button>
+                          {shift.status !== 'Confirmed' && (
+                            <button
+                              onClick={() => updateShift(shift.id, { status: 'Confirmed' })}
+                              className="px-2 py-0.5 text-[11px] font-medium bg-emerald-950 text-emerald-300 border border-emerald-800/60 rounded hover:bg-emerald-900 transition-colors cursor-pointer"
+                            >
+                              Confirm
+                            </button>
+                          )}
+                          <button
+                            onClick={() => deleteShift(shift.id)}
+                            title="Cancel Shift"
+                            className="p-1 text-neutral-400 hover:text-rose-400 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
 
                 {filteredShifts.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-neutral-400">
+                    <td colSpan={8} className="py-12 text-center text-neutral-400">
                       <Calendar className="w-8 h-8 mx-auto mb-2 text-neutral-600" />
                       <p className="text-sm font-medium">No shifts scheduled for selected filters</p>
                       <p className="text-xs text-neutral-500 mt-1">Dispatch crew using the button above</p>
@@ -557,6 +673,26 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
                     </span>
                   ))}
                 </div>
+
+                {(() => {
+                  const memberShifts = shifts.filter(
+                    (s) => s.staffId === member.id && s.assignedEquipment && s.assignedEquipment.length > 0
+                  );
+                  const totalGearUnits = memberShifts.reduce(
+                    (acc, s) => acc + (s.assignedEquipment?.reduce((sub, eq) => sub + eq.quantity, 0) || 0),
+                    0
+                  );
+                  if (totalGearUnits === 0) return null;
+                  return (
+                    <div className="mt-3 p-2 bg-neutral-950/70 border border-neutral-800 rounded-lg flex items-center justify-between text-[11px] font-mono">
+                      <span className="text-neutral-400 flex items-center gap-1.5">
+                        <Package className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Assigned Shift Gear:</span>
+                      </span>
+                      <span className="text-amber-300 font-bold">{totalGearUnits} units staged</span>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="pt-3 border-t border-neutral-800 flex items-center justify-between text-xs">
@@ -613,13 +749,35 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
                   {shifts
                     .filter((s) => s.eventName === callSheetEvent)
                     .map((s) => (
-                      <div key={s.id} className="py-2 flex items-center justify-between">
+                      <div key={s.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                         <div>
-                          <span className="font-bold text-white">{s.staffName}</span>
-                          <span className="text-neutral-400 text-[11px] ml-2 font-mono">({s.role})</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-white">{s.staffName}</span>
+                            <span className="text-neutral-400 text-[11px] font-mono">({s.role})</span>
+                          </div>
                           <div className="text-[11px] text-neutral-400">{s.callType} · {s.venue}</div>
+                          {s.assignedEquipment && s.assignedEquipment.length > 0 && (
+                            <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                              <span className="text-amber-400 font-semibold flex items-center gap-1">
+                                <Package className="w-3 h-3" />
+                                <span>Staged Gear:</span>
+                              </span>
+                              {s.assignedEquipment.map((eq) => (
+                                <span
+                                  key={eq.id}
+                                  className={`px-1.5 py-0.5 rounded border font-mono ${
+                                    eq.stagedStatus === 'Staged / Checked Out'
+                                      ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
+                                      : 'bg-neutral-900 text-neutral-300 border-neutral-800'
+                                  }`}
+                                >
+                                  {eq.name} (x{eq.quantity}) [{eq.stagedStatus === 'Staged / Checked Out' ? '✓ Staged' : 'Pending'}]
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        <div className="text-right font-mono text-amber-400 font-bold">
+                        <div className="text-right font-mono text-amber-400 font-bold shrink-0">
                           Call: {s.startTime}
                         </div>
                       </div>
@@ -946,6 +1104,14 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
         staff={staff}
         onApplyToShift={handleApplyCalculatorResult}
       />
+
+      {/* Shift Gear Assignment & Staging Modal */}
+      {currentActiveShiftForGear && (
+        <ShiftGearAssignmentModal
+          shift={currentActiveShiftForGear}
+          onClose={() => setSelectedShiftForGear(null)}
+        />
+      )}
     </div>
   );
 };

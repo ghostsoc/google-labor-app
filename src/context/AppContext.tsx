@@ -21,6 +21,10 @@ import {
   OperationType,
   handleFirestoreError,
   testConnection,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  sendPasswordResetEmail,
 } from '../firebase';
 import {
   InventoryItem,
@@ -57,6 +61,9 @@ interface AppContextType {
   authLoading: boolean;
   isCloudSynced: boolean;
   signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
 
   // Inventory
@@ -466,6 +473,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAuthLoading(false);
       throw err;
     }
+  };
+
+  // Email & Password Sign-in
+  const signInWithEmail = async (email: string, password: string) => {
+    try {
+      setAuthLoading(true);
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+    } catch (err) {
+      setAuthLoading(false);
+      throw err;
+    }
+  };
+
+  // Email & Password Sign-up
+  const signUpWithEmail = async (email: string, password: string, displayName?: string) => {
+    try {
+      setAuthLoading(true);
+      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      if (displayName && userCredential.user) {
+        await updateProfile(userCredential.user, { displayName });
+        // Update local and firestore profile
+        setCurrentUser((prev) => (prev ? { ...prev, displayName } : null));
+        try {
+          await setDoc(
+            doc(db, 'users', userCredential.user.uid),
+            {
+              uid: userCredential.user.uid,
+              email: userCredential.user.email || '',
+              displayName,
+              photoURL: '',
+              role: 'Lead Engineer',
+              createdAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        } catch (e) {
+          console.warn('Profile write:', e);
+        }
+      }
+    } catch (err) {
+      setAuthLoading(false);
+      throw err;
+    }
+  };
+
+  // Password Reset Email
+  const resetPassword = async (email: string) => {
+    await sendPasswordResetEmail(auth, email.trim());
   };
 
   // Sign out
