@@ -25,6 +25,7 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   sendPasswordResetEmail,
+  uploadFileToStorage,
 } from '../firebase';
 import {
   InventoryItem,
@@ -56,7 +57,7 @@ interface AppContextType {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
 
-  // Firebase Auth
+  // Firebase Auth & Cloud Storage
   currentUser: AppUser | null;
   authLoading: boolean;
   isCloudSynced: boolean;
@@ -65,6 +66,7 @@ interface AppContextType {
   signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
+  uploadFile: (path: string, file: File | Blob) => Promise<string>;
 
   // Inventory
   inventory: InventoryItem[];
@@ -532,6 +534,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err) {
       console.error('Sign-out error:', err);
     }
+  };
+
+  // Cloud Storage File Upload
+  const uploadFile = async (path: string, file: File | Blob): Promise<string> => {
+    return await uploadFileToStorage(path, file);
   };
 
   // --------------------------------------------------------------------------
@@ -1119,7 +1126,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         authLoading,
         isCloudSynced,
         signInWithGoogle,
+        signInWithEmail,
+        signUpWithEmail,
+        resetPassword,
         logout,
+        uploadFile,
 
         inventory,
         addInventoryItem,

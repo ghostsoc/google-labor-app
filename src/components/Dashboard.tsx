@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { MasterScheduleCalendar } from './MasterScheduleCalendar';
+import { FinancialOverview } from './FinancialOverview';
 import {
   Package,
   Users,
@@ -227,6 +228,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewQuote, onOpenNewS
           </div>
         </div>
       </div>
+
+      {/* Financial Overview & Real-Time Firestore Revenue Trends */}
+      <FinancialOverview />
 
       {/* Master Event & Dispatch Schedule Calendar */}
       <MasterScheduleCalendar

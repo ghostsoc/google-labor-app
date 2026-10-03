@@ -157,6 +157,56 @@ export interface ClientQuote {
   validUntil: string;
   pulledGearStatus?: Record<string, number>;
   convertedToInvoiceId?: string;
+  meetingDiagram?: MeetingDiagramData;
+}
+
+// MEETING & STAGE PLOT DIAGRAM LAYOUT
+export type DiagramElementType =
+  | 'stage'
+  | 'podium'
+  | 'led_screen'
+  | 'projection_screen'
+  | 'foh_console'
+  | 'speaker_left'
+  | 'speaker_right'
+  | 'subwoofer'
+  | 'lighting_truss'
+  | 'camera'
+  | 'theater_seating'
+  | 'round_table'
+  | 'classroom_table'
+  | 'power_drop'
+  | 'cable_path'
+  | 'custom_shape';
+
+export interface DiagramElement {
+  id: string;
+  type: DiagramElementType;
+  label: string;
+  x: number; // percentage (0-100) or pixels
+  y: number; // percentage (0-100) or pixels
+  width: number; // in pixels or grid units
+  height: number;
+  rotation?: number; // 0, 45, 90, 180, 270 deg
+  color?: string;
+  notes?: string;
+  equipmentSku?: string;
+}
+
+export interface MeetingDiagramData {
+  backgroundImageUrl?: string; // Uploaded diagram / floor plan URL (image or PDF preview)
+  backgroundOpacity?: number; // 0.1 to 1.0 (default 0.75)
+  canvasWidth?: number;
+  canvasHeight?: number;
+  roomDimensions?: {
+    lengthFt: number;
+    widthFt: number;
+    ceilingHeightFt?: number;
+    roomName?: string;
+  };
+  elements: DiagramElement[];
+  notes?: string;
+  updatedAt?: string;
 }
 
 // INVOICES & PAYMENTS

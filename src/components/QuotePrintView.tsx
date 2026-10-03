@@ -187,6 +187,60 @@ export const QuotePrintView: React.FC = () => {
           </div>
         </div>
 
+        {/* Meeting & Stage Layout Diagram (if present) */}
+        {activeQuoteForPrint.meetingDiagram && activeQuoteForPrint.meetingDiagram.elements.length > 0 && (
+          <div className="py-6 border-b border-neutral-300">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs uppercase tracking-wider font-bold text-neutral-900">
+                Meeting Room & Staging Layout Diagram
+              </h3>
+              <span className="text-[10px] font-mono text-neutral-500">
+                Room: {activeQuoteForPrint.meetingDiagram.roomDimensions?.lengthFt || 90}ft x {activeQuoteForPrint.meetingDiagram.roomDimensions?.widthFt || 60}ft · Trim: {activeQuoteForPrint.meetingDiagram.roomDimensions?.ceilingHeightFt || 22}ft
+              </span>
+            </div>
+
+            <div
+              className="relative w-full h-64 bg-neutral-100 border border-neutral-300 rounded-lg overflow-hidden flex items-center justify-center"
+              style={{
+                backgroundImage: 'radial-gradient(circle, rgba(0, 0, 0, 0.12) 1px, transparent 1px)',
+                backgroundSize: '16px 16px',
+              }}
+            >
+              {activeQuoteForPrint.meetingDiagram.backgroundImageUrl && (
+                <div
+                  className="absolute inset-0 bg-cover bg-center"
+                  style={{
+                    backgroundImage: `url(${activeQuoteForPrint.meetingDiagram.backgroundImageUrl})`,
+                    opacity: activeQuoteForPrint.meetingDiagram.backgroundOpacity || 0.6,
+                  }}
+                />
+              )}
+
+              <div className="relative w-[700px] h-[450px] scale-[0.55] origin-center">
+                {activeQuoteForPrint.meetingDiagram.elements.map((el) => (
+                  <div
+                    key={el.id}
+                    className="absolute flex items-center justify-center text-center p-1 rounded font-mono text-[10px] font-bold text-white shadow-xs"
+                    style={{
+                      left: `${el.x}px`,
+                      top: `${el.y}px`,
+                      width: `${el.width}px`,
+                      height: `${el.height}px`,
+                      backgroundColor: el.color || '#3b82f6',
+                      transform: `rotate(${el.rotation || 0}deg)`,
+                    }}
+                  >
+                    <span className="truncate px-1">{el.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <p className="text-[10px] text-neutral-500 mt-1.5 italic">
+              Production schematic indicating stage positioning, LED walls, audio line arrays, FOH mix position, and audience layout.
+            </p>
+          </div>
+        )}
+
         {/* Terms & Authorization Block */}
         <div className="pt-6 space-y-6 text-xs text-neutral-600">
           <div>

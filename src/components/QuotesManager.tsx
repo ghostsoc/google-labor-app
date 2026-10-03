@@ -8,7 +8,9 @@ import {
   InventoryItem,
   CrewRole,
   Client,
+  MeetingDiagramData,
 } from '../types';
+import { MeetingDiagramEditor } from './MeetingDiagramEditor';
 import {
   FileText,
   Plus,
@@ -27,6 +29,9 @@ import {
   X,
   ExternalLink,
   ChevronDown,
+  Image as ImageIcon,
+  Sparkles,
+  Maximize2,
 } from 'lucide-react';
 
 interface QuotesManagerProps {
@@ -83,6 +88,85 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
   const [builderDiscountPercent, setBuilderDiscountPercent] = useState<number>(0);
   const [builderClientNotes, setBuilderClientNotes] = useState('');
   const [builderInternalNotes, setBuilderInternalNotes] = useState('');
+
+  // Meeting Diagram Builder State
+  const [builderMeetingDiagram, setBuilderMeetingDiagram] = useState<MeetingDiagramData | undefined>({
+    roomDimensions: { lengthFt: 90, widthFt: 60, ceilingHeightFt: 22, roomName: 'Moscone Center - Hall A' },
+    backgroundOpacity: 0.65,
+    elements: [
+      {
+        id: 'el-stage-01',
+        type: 'stage',
+        label: 'Main Stage (32x16ft)',
+        x: 220,
+        y: 60,
+        width: 260,
+        height: 100,
+        rotation: 0,
+        color: '#3b82f6',
+        notes: 'Raised 36-inch with black wrap',
+      },
+      {
+        id: 'el-led-01',
+        type: 'led_screen',
+        label: 'Absen 2.6mm Curved LED Wall',
+        x: 240,
+        y: 65,
+        width: 220,
+        height: 18,
+        rotation: 0,
+        color: '#eab308',
+      },
+      {
+        id: 'el-podium-01',
+        type: 'podium',
+        label: 'Keynote Podium',
+        x: 330,
+        y: 110,
+        width: 36,
+        height: 36,
+        rotation: 0,
+        color: '#06b6d4',
+        notes: 'Dual Shure Gooseneck Mics',
+      },
+      {
+        id: 'el-spk-l',
+        type: 'speaker_left',
+        label: 'Kara Left Array',
+        x: 180,
+        y: 80,
+        width: 30,
+        height: 48,
+        rotation: 0,
+        color: '#10b981',
+      },
+      {
+        id: 'el-spk-r',
+        type: 'speaker_right',
+        label: 'Kara Right Array',
+        x: 490,
+        y: 80,
+        width: 30,
+        height: 48,
+        rotation: 0,
+        color: '#10b981',
+      },
+      {
+        id: 'el-foh-01',
+        type: 'foh_console',
+        label: 'FOH Audio & Lighting Control',
+        x: 275,
+        y: 350,
+        width: 150,
+        height: 55,
+        rotation: 0,
+        color: '#8b5cf6',
+      },
+    ],
+  });
+
+  const [activeDiagramModalQuote, setActiveDiagramModalQuote] = useState<ClientQuote | null>(null);
+  const [isDiagramExpandedInBuilder, setIsDiagramExpandedInBuilder] = useState(true);
 
   // Equipment Picker Modal Helper
   const [isGearPickerOpen, setIsGearPickerOpen] = useState(false);
@@ -212,6 +296,7 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
       internalNotes: builderInternalNotes,
       createdAt: new Date().toISOString().split('T')[0],
       validUntil: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+      meetingDiagram: builderMeetingDiagram,
     });
 
     setIsCreateModalOpen(false);
@@ -320,6 +405,17 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
                       <div className="text-xs text-neutral-300 font-medium truncate mt-0.5">
                         {quote.eventName}
                       </div>
+                      {quote.meetingDiagram && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveDiagramModalQuote(quote)}
+                          className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-neutral-950 border border-neutral-800 hover:border-amber-400 text-amber-400 mt-1 cursor-pointer transition-colors"
+                          title="Click to view/edit stage layout diagram"
+                        >
+                          <ImageIcon className="w-3 h-3 text-amber-400" />
+                          <span>Diagram ({quote.meetingDiagram.elements.length} AV items)</span>
+                        </button>
+                      )}
                     </td>
 
                     {/* Client & Venue */}
@@ -364,6 +460,19 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
                     {/* Actions */}
                     <td className="py-3.5 px-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* Meeting Diagram & Stage Layout */}
+                        <button
+                          onClick={() => setActiveDiagramModalQuote(quote)}
+                          title="View / Edit Meeting Diagram & Stage Layout"
+                          className={`p-1.5 rounded transition-colors cursor-pointer ${
+                            quote.meetingDiagram
+                              ? 'text-amber-400 hover:text-amber-300 hover:bg-neutral-800'
+                              : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                          }`}
+                        >
+                          <ImageIcon className="w-3.5 h-3.5" />
+                        </button>
+
                         {/* Proposal PDF View */}
                         <button
                           onClick={() => setActiveQuoteForPrint(quote)}
@@ -783,6 +892,54 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
               </div>
             </div>
 
+            {/* Step 4: Meeting Diagram & Stage Layout */}
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-800 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-amber-400/10 text-amber-400 border border-amber-400/20">
+                    <ImageIcon className="w-4 h-4" />
+                  </span>
+                  <div>
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                      <span>Step 4: Meeting Diagram & AV Stage Layout</span>
+                      <span className="text-[10px] font-mono px-2 py-0.2 rounded bg-neutral-900 border border-neutral-800 text-amber-300 font-semibold">
+                        {builderMeetingDiagram?.elements?.length || 0} Elements
+                      </span>
+                      {builderMeetingDiagram?.backgroundImageUrl && (
+                        <span className="text-[10px] font-mono px-2 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-semibold">
+                          CAD / Plan Attached
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-[11px] text-neutral-400">
+                      Upload venue floorplan or architectural drawing, arrange staging and AV equipment, and set room dimensions
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDiagramExpandedInBuilder(!isDiagramExpandedInBuilder)}
+                    className="px-3 py-1.5 text-xs font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
+                  >
+                    {isDiagramExpandedInBuilder ? 'Hide Diagram Canvas' : 'Show Diagram Canvas'}
+                  </button>
+                </div>
+              </div>
+
+              {isDiagramExpandedInBuilder && (
+                <div className="border border-neutral-800 rounded-xl overflow-hidden p-3 bg-neutral-950/60">
+                  <MeetingDiagramEditor
+                    diagramData={builderMeetingDiagram}
+                    onChange={(updated) => setBuilderMeetingDiagram(updated)}
+                    eventName={builderEventName}
+                    venueName={builderVenueName}
+                  />
+                </div>
+              )}
+            </div>
+
             {/* Financial Summary & Bottom Actions */}
             <div className="p-4 bg-neutral-950/80 border border-neutral-800 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs">
               <div className="space-y-2">
@@ -968,6 +1125,59 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
                 className="px-4 py-2 bg-neutral-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
               >
                 Done Adding
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Existing Proposal Meeting Diagram Editor Modal */}
+      {activeDiagramModalQuote && (
+        <div className="fixed inset-0 z-50 bg-neutral-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl max-w-5xl w-full p-5 sm:p-6 space-y-4 shadow-2xl my-auto">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-lg bg-amber-400/10 text-amber-400 border border-amber-400/20">
+                  <ImageIcon className="w-5 h-5" />
+                </span>
+                <div>
+                  <h2 className="text-base font-bold text-white">
+                    Proposal Meeting Diagram & Stage Layout: {activeDiagramModalQuote.eventName}
+                  </h2>
+                  <p className="text-xs text-neutral-400">
+                    {activeDiagramModalQuote.quoteNumber} · {activeDiagramModalQuote.venueName} · Client: {activeDiagramModalQuote.clientCompany || activeDiagramModalQuote.clientName}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveDiagramModalQuote(null)}
+                className="p-1.5 text-neutral-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <MeetingDiagramEditor
+              diagramData={activeDiagramModalQuote.meetingDiagram}
+              onChange={(updated) => {
+                updateQuote(activeDiagramModalQuote.id, { meetingDiagram: updated });
+                setActiveDiagramModalQuote({ ...activeDiagramModalQuote, meetingDiagram: updated });
+              }}
+              eventName={activeDiagramModalQuote.eventName}
+              venueName={activeDiagramModalQuote.venueName}
+              isModal
+              onClose={() => setActiveDiagramModalQuote(null)}
+            />
+
+            <div className="flex items-center justify-between pt-3 border-t border-neutral-800">
+              <span className="text-xs text-neutral-400 font-mono">
+                Changes saved automatically to quote document in Firestore
+              </span>
+              <button
+                onClick={() => setActiveDiagramModalQuote(null)}
+                className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-neutral-950 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                Done
               </button>
             </div>
           </div>

@@ -10,11 +10,13 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 
 export {
   signInWithEmailAndPassword,
@@ -23,7 +25,16 @@ export {
   sendPasswordResetEmail,
   signInWithPopup,
   signOut,
+  ref,
+  uploadBytes,
+  getDownloadURL,
 };
+
+export async function uploadFileToStorage(path: string, file: File | Blob): Promise<string> {
+  const storageRef = ref(storage, path);
+  const snapshot = await uploadBytes(storageRef, file);
+  return await getDownloadURL(snapshot.ref);
+}
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
