@@ -32,16 +32,15 @@ service cloud.firestore {
     // Users Collection
     match /users/{userId} {
       function isValidUser(data) {
-        return data.uid is string && data.uid.size() <= 128 && data.uid == request.auth.uid
+        return data.uid is string && data.uid.size() <= 128
           && data.email is string && data.email.size() <= 256;
       }
 
-      allow get: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
-      allow list: if isVerifiedUser() && resource.data.uid == request.auth.uid;
-      allow create: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId && isValidUser(incoming());
-      allow update: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId && isValidUser(incoming())
-        && incoming().uid == existing().uid;
-      allow delete: if false;
+      allow get: if isVerifiedUser() && isValidId(userId);
+      allow list: if isVerifiedUser();
+      allow create: if isVerifiedUser() && isValidId(userId) && isValidUser(incoming());
+      allow update: if isVerifiedUser() && isValidId(userId) && isValidUser(incoming());
+      allow delete: if isVerifiedUser() && isValidId(userId);
     }
 
     // Inventory Collection

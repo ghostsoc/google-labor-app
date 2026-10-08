@@ -9,7 +9,10 @@
         "email": { "type": "string", "maxLength": 256 },
         "displayName": { "type": "string", "maxLength": 128 },
         "photoURL": { "type": "string", "maxLength": 1024 },
-        "role": { "type": "string", "enum": ["Admin", "Lead Engineer", "Technician", "Warehouse Manager"] },
+        "role": { "type": "string", "enum": ["Admin", "Production Manager", "Warehouse Lead", "Lead Engineer", "Technician", "Finance & Billing"] },
+        "department": { "type": "string", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["Active", "Suspended", "Invited"] },
         "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["uid", "email"]
