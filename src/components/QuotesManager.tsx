@@ -32,7 +32,9 @@ import {
   Image as ImageIcon,
   Sparkles,
   Maximize2,
+  Eye,
 } from 'lucide-react';
+import { EventDetailModal } from './EventDetailModal';
 
 interface QuotesManagerProps {
   isCreateModalOpen: boolean;
@@ -65,6 +67,7 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
+  const [selectedQuoteForDetail, setSelectedQuoteForDetail] = useState<ClientQuote | null>(null);
 
   // Interactive Quote Builder State
   const [builderEventName, setBuilderEventName] = useState('Apex Technology Showcase 2026');
@@ -399,11 +402,18 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
                   <tr key={quote.id} className="hover:bg-neutral-800/30 transition-colors">
                     {/* Quote & Event */}
                     <td className="py-3.5 px-4 max-w-xs">
-                      <div className="font-bold text-white flex items-center gap-2">
-                        <span>{quote.quoteNumber}</span>
-                      </div>
-                      <div className="text-xs text-neutral-300 font-medium truncate mt-0.5">
-                        {quote.eventName}
+                      <div
+                        onClick={() => setSelectedQuoteForDetail(quote)}
+                        className="cursor-pointer group"
+                        title="Click to view full event production details"
+                      >
+                        <div className="font-bold text-white flex items-center gap-1.5 group-hover:text-amber-400 transition-colors">
+                          <span>{quote.quoteNumber}</span>
+                          <span className="text-[10px] text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity">Details →</span>
+                        </div>
+                        <div className="text-xs text-neutral-300 font-medium truncate mt-0.5 group-hover:text-amber-200 transition-colors">
+                          {quote.eventName}
+                        </div>
                       </div>
                       {quote.meetingDiagram && (
                         <button
@@ -460,6 +470,15 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
                     {/* Actions */}
                     <td className="py-3.5 px-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* Event Details Comprehensive Modal */}
+                        <button
+                          onClick={() => setSelectedQuoteForDetail(quote)}
+                          title="View Event & Production Details"
+                          className="p-1.5 text-neutral-400 hover:text-amber-400 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+
                         {/* Meeting Diagram & Stage Layout */}
                         <button
                           onClick={() => setActiveDiagramModalQuote(quote)}
@@ -1182,6 +1201,19 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Comprehensive Event Details Modal */}
+      {selectedQuoteForDetail && (
+        <EventDetailModal
+          quote={selectedQuoteForDetail}
+          isOpen={!!selectedQuoteForDetail}
+          onClose={() => setSelectedQuoteForDetail(null)}
+          onOpenEditDiagram={(q) => {
+            setSelectedQuoteForDetail(null);
+            setActiveDiagramModalQuote(q);
+          }}
+        />
       )}
     </div>
   );

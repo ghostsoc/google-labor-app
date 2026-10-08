@@ -3,6 +3,13 @@ import { useApp } from '../context/AppContext';
 import { StaffMember, LaborShift, CrewRole, AssignedShiftEquipment } from '../types';
 import { LaborCostCalculatorModal } from './LaborCostCalculatorModal';
 import { ShiftGearAssignmentModal } from './ShiftGearAssignmentModal';
+import { StaffLaborCostSummary } from './StaffLaborCostSummary';
+import { ShiftLaborCostDetailModal } from './ShiftLaborCostDetailModal';
+import {
+  calculateFleetLaborSummary,
+  calculateShiftLaborCost,
+  ShiftLaborCostDetails,
+} from '../utils/laborCostUtils';
 import {
   Users,
   Calendar,
@@ -54,6 +61,7 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [callSheetEvent, setCallSheetEvent] = useState<string | null>(null);
   const [selectedShiftForGear, setSelectedShiftForGear] = useState<LaborShift | null>(null);
+  const [selectedShiftForLaborDetail, setSelectedShiftForLaborDetail] = useState<ShiftLaborCostDetails | null>(null);
 
   // Keep selected shift synchronized with current state in shifts array
   const currentActiveShiftForGear = useMemo(() => {
@@ -187,6 +195,17 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
     const matchesRole = selectedRole === 'All' || st.role.includes(selectedRole);
     return matchesSearch && matchesRole;
   });
+
+  const isFiltered =
+    searchQuery.trim() !== '' ||
+    selectedRole !== 'All' ||
+    selectedEvent !== 'All' ||
+    stagingFilter !== 'All';
+
+  // Calculate estimated labor costs across shifts based on assigned crew hours and role-based pay rates
+  const fleetLaborSummary = useMemo(() => {
+    return calculateFleetLaborSummary(filteredShifts, staff);
+  }, [filteredShifts, staff]);
 
   const handleStaffSelect = (staffId: string) => {
     const selected = staff.find((s) => s.id === staffId);
@@ -355,6 +374,17 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
         )}
       </div>
 
+      {/* Labor Costs & Role-Based Payroll Summary in Staff Dashboard */}
+      {activeSubTab === 'shifts' && (
+        <StaffLaborCostSummary
+          summary={fleetLaborSummary}
+          isFiltered={isFiltered}
+          filterEventName={selectedEvent !== 'All' ? selectedEvent : undefined}
+          filterRoleName={selectedRole !== 'All' ? selectedRole : undefined}
+          onSelectShiftDetail={(details) => setSelectedShiftForLaborDetail(details)}
+        />
+      )}
+
       {/* Search and Filters */}
       <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-xl flex flex-col md:flex-row gap-3 items-center justify-between">
         <div className="relative w-full md:w-80">
@@ -458,7 +488,8 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
                   <th className="py-3 px-4">Technician</th>
                   <th className="py-3 px-4">Role & Call Scope</th>
                   <th className="py-3 px-4">Assigned Gear & Staging</th>
-                  <th className="py-3 px-4 text-right">Agreed Rate</th>
+                  <th className="py-3 px-4 text-right">Agreed Base</th>
+                  <th className="py-3 px-4 text-right">Est. Labor Cost</th>
                   <th className="py-3 px-4 text-center">Status</th>
                   <th className="py-3 px-4 text-right">Action</th>
                 </tr>
@@ -471,6 +502,10 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
                     .filter((item) => item.stagedStatus === 'Staged / Checked Out')
                     .reduce((sum, item) => sum + item.quantity, 0);
                   const isAllStaged = gearList.length > 0 && stagedUnits === totalUnits;
+
+                  const costDetails =
+                    fleetLaborSummary.shiftDetailsMap.get(shift.id) ||
+                    calculateShiftLaborCost(shift, staff);
 
                   return (
                     <tr key={shift.id} className="hover:bg-neutral-800/30 transition-colors">
@@ -540,12 +575,38 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
                         )}
                       </td>
 
-                      {/* Rate */}
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap font-mono tabular-nums font-semibold text-white">
-                        ${shift.rate}{' '}
-                        <span className="text-[10px] text-neutral-400 font-normal">
-                          ({shift.rateType})
-                        </span>
+                      {/* Agreed Base Rate */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap font-mono tabular-nums text-neutral-300">
+                        <div className="font-semibold text-white">${shift.rate}</div>
+                        <div className="text-[10px] text-neutral-500 font-normal">
+                          {shift.rateType}
+                        </div>
+                      </td>
+
+                      {/* Estimated Labor Cost */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap font-mono tabular-nums">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedShiftForLaborDetail(costDetails)}
+                          className="group text-right cursor-pointer inline-block"
+                          title="Click to view detailed labor cost & overtime calculation"
+                        >
+                          <div className="font-bold text-amber-400 group-hover:text-amber-300 text-xs sm:text-sm transition-colors flex items-center justify-end gap-1">
+                            <span>${costDetails.totalEstimatedCost.toFixed(2)}</span>
+                            <DollarSign className="w-3 h-3 text-amber-400 opacity-60 group-hover:opacity-100" />
+                          </div>
+                          <div className="flex items-center justify-end gap-1 mt-0.5">
+                            {costDetails.hasOvertime ? (
+                              <span className="text-[10px] text-rose-300 font-mono bg-rose-950/80 px-1 py-0.2 rounded border border-rose-800/80">
+                                OT: +${(costDetails.otPay + costDetails.doubleTimePay).toFixed(0)}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-emerald-400/90 font-mono">
+                                {costDetails.regularHours}h straight
+                              </span>
+                            )}
+                          </div>
+                        </button>
                       </td>
 
                       {/* Status */}
@@ -596,7 +657,7 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
 
                 {filteredShifts.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-neutral-400">
+                    <td colSpan={9} className="py-12 text-center text-neutral-400">
                       <Calendar className="w-8 h-8 mx-auto mb-2 text-neutral-600" />
                       <p className="text-sm font-medium">No shifts scheduled for selected filters</p>
                       <p className="text-xs text-neutral-500 mt-1">Dispatch crew using the button above</p>
@@ -1110,6 +1171,15 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
         <ShiftGearAssignmentModal
           shift={currentActiveShiftForGear}
           onClose={() => setSelectedShiftForGear(null)}
+        />
+      )}
+
+      {/* Individual Shift Labor Cost & Calculation Breakdown Modal */}
+      {selectedShiftForLaborDetail && (
+        <ShiftLaborCostDetailModal
+          details={selectedShiftForLaborDetail}
+          isOpen={!!selectedShiftForLaborDetail}
+          onClose={() => setSelectedShiftForLaborDetail(null)}
         />
       )}
     </div>

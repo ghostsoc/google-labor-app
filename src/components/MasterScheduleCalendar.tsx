@@ -22,11 +22,14 @@ import {
   Sparkles,
   Layers,
   X,
+  Printer,
 } from 'lucide-react';
+import { EventDetailModal } from './EventDetailModal';
 
 interface MasterScheduleCalendarProps {
   onOpenNewShift?: (initialDate?: string, eventName?: string) => void;
   onOpenNewQuote?: () => void;
+  onOpenEventDetail?: (quote: ClientQuote) => void;
 }
 
 export type CalendarViewMode = 'month' | 'week' | 'agenda';
@@ -49,6 +52,7 @@ export interface CalendarEventItem {
 export const MasterScheduleCalendar: React.FC<MasterScheduleCalendarProps> = ({
   onOpenNewShift,
   onOpenNewQuote,
+  onOpenEventDetail,
 }) => {
   const {
     quotes,
@@ -57,6 +61,16 @@ export const MasterScheduleCalendar: React.FC<MasterScheduleCalendarProps> = ({
     setSelectedQuoteForPull,
     setActiveQuoteForPrint,
   } = useApp();
+
+  const [selectedEventForModal, setSelectedEventForModal] = useState<ClientQuote | null>(null);
+
+  const handleOpenEventDetail = (quote: ClientQuote) => {
+    if (onOpenEventDetail) {
+      onOpenEventDetail(quote);
+    } else {
+      setSelectedEventForModal(quote);
+    }
+  };
 
   // Initialize view state: default to October 2026 where our active productions & shifts are scheduled
   const [currentDate, setCurrentDate] = useState(() => new Date(2026, 9, 2)); // Oct 2, 2026
@@ -569,8 +583,15 @@ export const MasterScheduleCalendar: React.FC<MasterScheduleCalendarProps> = ({
                     {rentalEvents.slice(0, 2).map((item) => (
                       <div
                         key={item.id}
-                        className="px-1.5 py-0.5 text-[10px] rounded font-medium truncate flex items-center gap-1 bg-amber-950/80 text-amber-200 border border-amber-800/60 hover:bg-amber-900 transition-colors"
-                        title={`${item.title} (${item.milestone}): ${item.venue}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDateStr(dayItem.dateStr);
+                          if (item.rawQuote) {
+                            handleOpenEventDetail(item.rawQuote);
+                          }
+                        }}
+                        className="px-1.5 py-0.5 text-[10px] rounded font-medium truncate flex items-center gap-1 bg-amber-950/80 text-amber-200 border border-amber-800/60 hover:bg-amber-900 hover:border-amber-400 transition-colors cursor-pointer"
+                        title={`Click to view event details: ${item.title} (${item.milestone})`}
                       >
                         <span className="font-bold text-amber-400 shrink-0">
                           {item.badgeText}:
@@ -634,7 +655,12 @@ export const MasterScheduleCalendar: React.FC<MasterScheduleCalendarProps> = ({
               return (
                 <div
                   key={item.id}
-                  onClick={() => setSelectedDateStr(item.date)}
+                  onClick={() => {
+                    setSelectedDateStr(item.date);
+                    if (item.rawQuote) {
+                      handleOpenEventDetail(item.rawQuote);
+                    }
+                  }}
                   className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-neutral-900/60 transition-colors cursor-pointer ${
                     selectedDateStr === item.date ? 'bg-neutral-900/80 border-l-4 border-l-amber-400' : ''
                   }`}
@@ -673,7 +699,7 @@ export const MasterScheduleCalendar: React.FC<MasterScheduleCalendarProps> = ({
                         >
                           {item.badgeText}
                         </span>
-                        <h4 className="text-sm font-bold text-white">{item.title}</h4>
+                        <h4 className="text-sm font-bold text-white hover:text-amber-300 transition-colors">{item.title}</h4>
                       </div>
                       <p className="text-xs text-neutral-400 mt-0.5">{item.subtitle}</p>
                       <div className="flex items-center gap-2 text-[11px] text-neutral-400 mt-1 font-mono">
@@ -695,17 +721,29 @@ export const MasterScheduleCalendar: React.FC<MasterScheduleCalendarProps> = ({
                     </span>
 
                     {item.rawQuote && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedQuoteForPull(item.rawQuote!);
-                          setActiveTab('pullsheet');
-                        }}
-                        className="px-2.5 py-1 text-xs font-semibold text-neutral-300 hover:text-white bg-neutral-800 hover:bg-neutral-700 rounded border border-neutral-700 transition-colors cursor-pointer"
-                        title="Open Pull Sheet for this quote"
-                      >
-                        Pull Sheet
-                      </button>
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEventDetail(item.rawQuote!);
+                          }}
+                          className="px-2.5 py-1 text-xs font-semibold text-amber-300 hover:text-neutral-950 bg-amber-400/10 hover:bg-amber-400 rounded border border-amber-400/30 transition-colors cursor-pointer"
+                          title="Open Event Details page"
+                        >
+                          Event Details
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedQuoteForPull(item.rawQuote!);
+                            setActiveTab('pullsheet');
+                          }}
+                          className="px-2.5 py-1 text-xs font-semibold text-neutral-300 hover:text-white bg-neutral-800 hover:bg-neutral-700 rounded border border-neutral-700 transition-colors cursor-pointer"
+                          title="Open Pull Sheet for this quote"
+                        >
+                          Pull Sheet
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -782,7 +820,8 @@ export const MasterScheduleCalendar: React.FC<MasterScheduleCalendarProps> = ({
                   return (
                     <div
                       key={rental.id}
-                      className="p-4 bg-neutral-900 border border-neutral-800 rounded-lg space-y-3 hover:border-neutral-700 transition-colors"
+                      onClick={() => handleOpenEventDetail(quote)}
+                      className="p-4 bg-neutral-900 border border-neutral-800 rounded-lg space-y-3 hover:border-amber-400/60 hover:bg-neutral-900/90 transition-all cursor-pointer group shadow-xs"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -794,7 +833,10 @@ export const MasterScheduleCalendar: React.FC<MasterScheduleCalendarProps> = ({
                               {quote.quoteNumber}
                             </span>
                           </div>
-                          <h4 className="text-sm font-bold text-white mt-1.5">{quote.eventName}</h4>
+                          <h4 className="text-sm font-bold text-white mt-1.5 group-hover:text-amber-300 transition-colors flex items-center gap-1.5">
+                            <span>{quote.eventName}</span>
+                            <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-amber-400" />
+                          </h4>
                           <p className="text-xs text-neutral-300 mt-0.5">{quote.clientCompany}</p>
                         </div>
 
@@ -826,23 +868,35 @@ export const MasterScheduleCalendar: React.FC<MasterScheduleCalendarProps> = ({
 
                       <div className="flex items-center justify-end gap-2 pt-1">
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEventDetail(quote);
+                          }}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:text-neutral-950 bg-amber-400/10 hover:bg-amber-400 rounded-lg border border-amber-400/30 transition-colors cursor-pointer"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Event Details →</span>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setSelectedQuoteForPull(quote);
                             setActiveTab('pullsheet');
                           }}
-                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-amber-400 hover:text-neutral-950 hover:bg-amber-400 bg-neutral-800 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-neutral-300 hover:text-white bg-neutral-800 hover:bg-neutral-700 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
                         >
                           <ClipboardCheck className="w-3.5 h-3.5" />
-                          <span>Warehouse Pull Sheet</span>
+                          <span>Pull Sheet</span>
                         </button>
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setActiveQuoteForPrint(quote);
                           }}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-neutral-300 hover:text-white bg-neutral-800 hover:bg-neutral-700 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
                         >
-                          <FileText className="w-3.5 h-3.5" />
-                          <span>View Quote</span>
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Print</span>
                         </button>
                       </div>
                     </div>
@@ -929,6 +983,15 @@ export const MasterScheduleCalendar: React.FC<MasterScheduleCalendarProps> = ({
           </div>
         )}
       </div>
+
+      {/* Event Details Comprehensive Modal */}
+      {selectedEventForModal && (
+        <EventDetailModal
+          quote={selectedEventForModal}
+          isOpen={!!selectedEventForModal}
+          onClose={() => setSelectedEventForModal(null)}
+        />
+      )}
     </div>
   );
 };

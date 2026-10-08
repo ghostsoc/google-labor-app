@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { MasterScheduleCalendar } from './MasterScheduleCalendar';
 import { FinancialOverview } from './FinancialOverview';
+import { EventDetailModal } from './EventDetailModal';
+import { ClientQuote } from '../types';
 import {
   Package,
   Users,
@@ -51,6 +53,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewQuote, onOpenNewS
   const activeMaintenance = maintenanceRecords.filter((m) => m.status === 'In Progress' || m.status === 'Scheduled');
 
   const upcomingQuotes = quotes.slice(0, 4);
+  const [dashboardSelectedEvent, setDashboardSelectedEvent] = useState<ClientQuote | null>(null);
 
   return (
     <div className="space-y-8 pb-12">
@@ -236,6 +239,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewQuote, onOpenNewS
       <MasterScheduleCalendar
         onOpenNewShift={onOpenNewShift}
         onOpenNewQuote={onOpenNewQuote}
+        onOpenEventDetail={(quote) => setDashboardSelectedEvent(quote)}
       />
 
       {/* Main Two-Column Workflow Section */}
@@ -268,7 +272,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewQuote, onOpenNewS
                 const hasInvoice = !!quote.convertedToInvoiceId;
 
                 return (
-                  <div key={quote.id} className="p-5 hover:bg-neutral-800/30 transition-colors">
+                  <div
+                    key={quote.id}
+                    onClick={() => setDashboardSelectedEvent(quote)}
+                    className="p-5 hover:bg-neutral-800/40 transition-colors cursor-pointer group"
+                  >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
@@ -286,7 +294,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewQuote, onOpenNewS
                             {quote.status}
                           </span>
                         </div>
-                        <h3 className="text-sm font-semibold text-white mt-1">{quote.eventName}</h3>
+                        <h3 className="text-sm font-semibold text-white mt-1 group-hover:text-amber-300 transition-colors flex items-center gap-1.5">
+                          <span>{quote.eventName}</span>
+                          <ChevronRight className="w-3.5 h-3.5 text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </h3>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-400 mt-1">
                           <span>{quote.clientCompany || quote.clientName}</span>
                           <span>·</span>
@@ -307,9 +318,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewQuote, onOpenNewS
                         </div>
 
                         {/* Quick action buttons */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDashboardSelectedEvent(quote);
+                          }}
+                          className="px-2.5 py-1.5 text-xs font-semibold bg-amber-400/10 hover:bg-amber-400 text-amber-300 hover:text-neutral-950 border border-amber-400/30 rounded-lg transition-colors cursor-pointer"
+                        >
+                          Event Details →
+                        </button>
+
                         {isApproved && (
                           <button
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setSelectedQuoteForPull(quote);
                               setActiveTab('pullsheet');
                             }}
@@ -320,7 +342,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewQuote, onOpenNewS
                         )}
 
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setActiveQuoteForPrint(quote);
                           }}
                           className="px-2.5 py-1.5 text-xs font-medium bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg transition-colors cursor-pointer"
@@ -499,6 +522,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewQuote, onOpenNewS
           </div>
         </div>
       </div>
+
+      {/* Event Details Modal */}
+      {dashboardSelectedEvent && (
+        <EventDetailModal
+          quote={dashboardSelectedEvent}
+          isOpen={!!dashboardSelectedEvent}
+          onClose={() => setDashboardSelectedEvent(null)}
+        />
+      )}
     </div>
   );
 };

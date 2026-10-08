@@ -60,7 +60,7 @@ export const EquipmentScanDetailModal: React.FC<EquipmentScanDetailModalProps> =
 
   const handleCheckOut = () => {
     if (item.availableQuantity <= 0) {
-      alert(`No units of ${item.name} currently available in warehouse to check out.`);
+      flashMessage(`No units of ${item.name} currently available in warehouse to check out.`);
       return;
     }
     const newAvail = item.availableQuantity - 1;
@@ -74,7 +74,7 @@ export const EquipmentScanDetailModal: React.FC<EquipmentScanDetailModalProps> =
 
   const handleCheckIn = () => {
     if (item.onRentQuantity <= 0) {
-      alert(`No units of ${item.name} currently recorded as on-rent.`);
+      flashMessage(`No units of ${item.name} currently recorded as on-rent.`);
       return;
     }
     const newOnRent = item.onRentQuantity - 1;
