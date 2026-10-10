@@ -5,11 +5,18 @@ import { LaborCostCalculatorModal } from './LaborCostCalculatorModal';
 import { ShiftGearAssignmentModal } from './ShiftGearAssignmentModal';
 import { StaffLaborCostSummary } from './StaffLaborCostSummary';
 import { ShiftLaborCostDetailModal } from './ShiftLaborCostDetailModal';
+import { StaffShiftConflictModal } from './StaffShiftConflictModal';
+import { StaffShiftTimelineView } from './StaffShiftTimelineView';
 import {
   calculateFleetLaborSummary,
   calculateShiftLaborCost,
   ShiftLaborCostDetails,
 } from '../utils/laborCostUtils';
+import {
+  detectLaborShiftConflicts,
+  checkProposedShiftConflict,
+  ShiftConflict,
+} from '../utils/conflictDetection';
 import {
   Users,
   Calendar,
@@ -18,6 +25,8 @@ import {
   Search,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
+  ShieldAlert,
   Phone,
   Mail,
   Award,
@@ -49,11 +58,29 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
 }) => {
   const { staff, shifts, quotes, inventory, addStaffMember, addShift, updateShift, deleteShift, deleteStaffMember } = useApp();
 
-  const [activeSubTab, setActiveSubTab] = useState<'shifts' | 'roster'>('shifts');
+  const [activeSubTab, setActiveSubTab] = useState<'shifts' | 'timeline' | 'roster'>('shifts');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState<string>('All');
   const [selectedEvent, setSelectedEvent] = useState<string>('All');
   const [stagingFilter, setStagingFilter] = useState<'All' | 'Staged' | 'Pending Staging'>('All');
+
+  // Conflict Detection & Notification System State
+  const conflicts = useMemo(() => {
+    return detectLaborShiftConflicts(shifts);
+  }, [shifts]);
+
+  const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
+  const [targetedConflictId, setTargetedConflictId] = useState<string | null>(null);
+  const [selectedTimelineDate, setSelectedTimelineDate] = useState<string>(
+    () => conflicts[0]?.date || shifts[0]?.date || '2026-10-08'
+  );
+
+  // Sync selected timeline date if active conflicts change
+  useEffect(() => {
+    if (conflicts.length > 0 && !shifts.some((s) => s.date === selectedTimelineDate)) {
+      setSelectedTimelineDate(conflicts[0].date);
+    }
+  }, [conflicts, shifts, selectedTimelineDate]);
 
   // Modal States
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
@@ -273,6 +300,48 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
     setIsShiftModalOpen(true);
   };
 
+  // Real-time conflict validation when filling out the Dispatch Shift form
+  const activeFormConflict = useMemo(() => {
+    if (!isShiftModalOpen) return null;
+    const assignedStaff = staff.find((s) => s.id === shiftForm.staffId);
+    return checkProposedShiftConflict(
+      {
+        staffId: shiftForm.staffId,
+        staffName: assignedStaff?.name,
+        date: shiftForm.date,
+        startTime: shiftForm.startTime,
+        endTime: shiftForm.endTime,
+        venue: shiftForm.venue,
+      },
+      shifts
+    );
+  }, [isShiftModalOpen, shiftForm, shifts, staff]);
+
+  // Simulation helper allowing users to test-trigger the conflict notification system
+  const handleInjectTestConflict = () => {
+    const targetStaff = staff.find((s) => s.id === 'staff-01') || staff[0];
+    const targetDate = shifts[0]?.date || '2026-10-04';
+    if (!targetStaff) return;
+
+    addShift({
+      eventName: 'Emergency Breakout Room Call',
+      staffId: targetStaff.id,
+      staffName: targetStaff.name,
+      role: targetStaff.role,
+      date: targetDate,
+      startTime: '10:00',
+      endTime: '15:00',
+      callType: 'Show Operator',
+      rateType: 'Day Rate',
+      rate: 650,
+      hours: 5,
+      status: 'Offered',
+      venue: 'Moscone Center - Breakout Salon B',
+      notes: 'Sample overlapping shift to demonstrate conflict detection system.',
+    });
+    setSelectedTimelineDate(targetDate);
+  };
+
   const handleCreateShift = (e: React.FormEvent) => {
     e.preventDefault();
     const assignedStaff = staff.find((s) => s.id === shiftForm.staffId);
@@ -338,6 +407,70 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
         </div>
       </div>
 
+      {/* Primary UI Notification System: Labor Shift Timeline Conflicts */}
+      {conflicts.length > 0 ? (
+        <div className="p-4 rounded-xl bg-gradient-to-r from-rose-950/70 via-neutral-900 to-amber-950/30 border border-rose-500/50 shadow-lg shadow-rose-950/40 flex flex-col md:flex-row md:items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/40 flex items-center justify-center shrink-0">
+              <ShieldAlert className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-rose-300 bg-rose-500/20 px-2 py-0.5 rounded border border-rose-500/30">
+                  ⚠️ Labor Timeline Conflict Alert
+                </span>
+                <span className="text-[11px] font-mono text-neutral-400">
+                  {conflicts.length} {conflicts.length === 1 ? 'Conflict Detected' : 'Conflicts Detected'}
+                </span>
+              </div>
+              <p className="text-xs text-neutral-200 font-medium mt-1">
+                {conflicts[0].title}: {conflicts[0].staffName} ({conflicts[0].date})
+                {conflicts.length > 1 ? ` and ${conflicts.length - 1} other timeline conflict` : ''}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
+            <button
+              onClick={() => {
+                setSelectedTimelineDate(conflicts[0].date);
+                setActiveSubTab('timeline');
+              }}
+              className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold rounded-lg border border-neutral-700 transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              <span>Inspect in Timeline</span>
+            </button>
+            <button
+              onClick={() => {
+                setTargetedConflictId(conflicts[0].id);
+                setIsConflictModalOpen(true);
+              }}
+              className="px-3.5 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>Review & Resolve ({conflicts.length})</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="p-3 bg-neutral-900/80 border border-neutral-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-neutral-400">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>
+              <strong className="text-emerald-400">Timeline Verified Clear:</strong> No double-bookings, transit bottlenecks, or fatigue violations detected across {shifts.length} shifts.
+            </span>
+          </div>
+          <button
+            onClick={handleInjectTestConflict}
+            className="text-[11px] font-mono text-neutral-400 hover:text-amber-400 underline cursor-pointer self-end sm:self-auto"
+            title="Create a sample overlapping shift to test the conflict alert UI"
+          >
+            + Simulate Test Conflict
+          </button>
+        </div>
+      )}
+
       {/* Sub-tab navigation */}
       <div className="flex items-center justify-between border-b border-neutral-800 pb-2">
         <div className="flex items-center gap-2">
@@ -350,6 +483,22 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
             }`}
           >
             Shift Dispatch Board ({shifts.length})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('timeline')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'timeline'
+                ? 'bg-amber-400 text-neutral-950 shadow-xs'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>Timeline Schedule</span>
+            {conflicts.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-500 text-white font-bold animate-pulse">
+                {conflicts.length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveSubTab('roster')}
@@ -507,14 +656,39 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
                     fleetLaborSummary.shiftDetailsMap.get(shift.id) ||
                     calculateShiftLaborCost(shift, staff);
 
+                  const relatedConflict = conflicts.find(
+                    (c) => c.shiftA.id === shift.id || c.shiftB.id === shift.id
+                  );
+
                   return (
-                    <tr key={shift.id} className="hover:bg-neutral-800/30 transition-colors">
+                    <tr
+                      key={shift.id}
+                      className={`transition-colors ${
+                        relatedConflict
+                          ? 'bg-rose-950/20 border-l-2 border-rose-500 hover:bg-rose-950/30'
+                          : 'hover:bg-neutral-800/30'
+                      }`}
+                    >
                       {/* Date & Time */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="font-bold text-white font-mono">{shift.date}</div>
                         <div className="text-[11px] text-neutral-400 font-mono mt-0.5">
                           {shift.startTime} – {shift.endTime} ({shift.hours}h)
                         </div>
+                        {relatedConflict && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetedConflictId(relatedConflict.id);
+                              setIsConflictModalOpen(true);
+                            }}
+                            className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition-colors cursor-pointer"
+                            title={`Conflict: ${relatedConflict.title}. Click to resolve.`}
+                          >
+                            <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0 animate-pulse" />
+                            <span>Conflict Detected →</span>
+                          </button>
+                        )}
                       </td>
 
                       {/* Production & Venue */}
@@ -627,6 +801,19 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
                       {/* Action */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
+                          {relatedConflict && (
+                            <button
+                              onClick={() => {
+                                setTargetedConflictId(relatedConflict.id);
+                                setIsConflictModalOpen(true);
+                              }}
+                              title="Resolve schedule conflict"
+                              className="px-2 py-0.5 text-[11px] font-medium bg-rose-950 text-rose-300 border border-rose-800/60 rounded hover:bg-rose-900 transition-colors cursor-pointer flex items-center gap-1"
+                            >
+                              <AlertTriangle className="w-3 h-3 text-rose-400" />
+                              <span>Resolve</span>
+                            </button>
+                          )}
                           <button
                             onClick={() => setSelectedShiftForGear(shift)}
                             title="Assign & Stage Equipment"
@@ -668,6 +855,22 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
             </table>
           </div>
         </div>
+      )}
+
+      {/* VIEW 2: Visual Timeline Schedule View */}
+      {activeSubTab === 'timeline' && (
+        <StaffShiftTimelineView
+          shifts={shifts}
+          staff={staff}
+          conflicts={conflicts}
+          selectedDate={selectedTimelineDate}
+          onSelectDate={(date) => setSelectedTimelineDate(date)}
+          onOpenConflictModal={(conflictId) => {
+            if (conflictId) setTargetedConflictId(conflictId);
+            setIsConflictModalOpen(true);
+          }}
+          onOpenGearModal={(shift) => setSelectedShiftForGear(shift)}
+        />
       )}
 
       {/* VIEW 2: Crew Roster */}
@@ -1016,6 +1219,22 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
                     className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-xs text-white focus:outline-none focus:border-amber-400"
                   />
                 </div>
+
+                {/* Real-time Conflict Alert in Shift Dispatch Modal */}
+                {activeFormConflict && (
+                  <div className="col-span-2 p-3 bg-rose-950/80 border border-rose-800 rounded-xl space-y-1.5 text-xs text-rose-200 animate-in fade-in">
+                    <div className="flex items-center gap-2 font-bold text-rose-300">
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 animate-pulse" />
+                      <span>{activeFormConflict.title}</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-neutral-200">
+                      {activeFormConflict.description}
+                    </p>
+                    <div className="text-[10px] text-amber-300 pt-0.5">
+                      💡 <strong>Recommendation:</strong> {activeFormConflict.recommendation}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-800">
@@ -1182,6 +1401,24 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
           onClose={() => setSelectedShiftForLaborDetail(null)}
         />
       )}
+
+      {/* Labor Shift Conflict Resolution Modal */}
+      <StaffShiftConflictModal
+        isOpen={isConflictModalOpen}
+        onClose={() => {
+          setIsConflictModalOpen(false);
+          setTargetedConflictId(null);
+        }}
+        conflicts={conflicts}
+        staff={staff}
+        shifts={shifts}
+        onUpdateShift={updateShift}
+        onDeleteShift={deleteShift}
+        onSelectDateInTimeline={(date) => {
+          setSelectedTimelineDate(date);
+          setActiveSubTab('timeline');
+        }}
+      />
     </div>
   );
 };

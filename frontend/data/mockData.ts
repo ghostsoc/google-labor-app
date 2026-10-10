@@ -806,6 +806,24 @@ export const initialShifts: LaborShift[] = [
     venue: 'Palace Hotel Ballroom, SF',
     notes: 'Assist with LED wall stacking, cabling and cable ramp safety.',
   },
+  {
+    id: 'shift-07',
+    quoteId: 'quote-02',
+    eventName: 'Silicon Valley Founders Gala (Breakout Hall)',
+    staffId: 'staff-06',
+    staffName: 'Tariq Al-Mansoor',
+    role: 'General AV Tech',
+    date: '2026-10-08',
+    startTime: '13:00',
+    endTime: '21:00',
+    callType: 'Show Operator',
+    rateType: 'Day Rate',
+    rate: 500,
+    hours: 8,
+    status: 'Offered',
+    venue: 'Palace Hotel, French Parlor Room, SF',
+    notes: 'Breakout room audio & slide projection operator.',
+  },
 ];
 
 export const initialQuotes: ClientQuote[] = [

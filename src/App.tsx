@@ -49,14 +49,20 @@ const MainLayout: React.FC = () => {
   };
 
   const handleOpenQuoteWithClient = (client: Client) => {
-    setPreselectedClient(client);
+    if (client && typeof client === 'object' && 'name' in client) {
+      setPreselectedClient(client);
+    } else {
+      setPreselectedClient(null);
+    }
     setIsQuoteBuilderOpen(true);
     setActiveTab('quotes');
   };
 
   const handleOpenNewShift = (initialDate?: string, eventName?: string) => {
-    if (initialDate || eventName) {
-      setShiftDispatchPrefill({ date: initialDate, eventName, openModal: true });
+    const validDate = typeof initialDate === 'string' ? initialDate : undefined;
+    const validEventName = typeof eventName === 'string' ? eventName : undefined;
+    if (validDate || validEventName) {
+      setShiftDispatchPrefill({ date: validDate, eventName: validEventName, openModal: true });
     } else {
       setShiftDispatchPrefill({ openModal: true });
     }

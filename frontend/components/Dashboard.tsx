@@ -85,14 +85,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewQuote, onOpenNewS
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <button
-              onClick={onOpenNewQuote}
+              onClick={() => onOpenNewQuote()}
               className="flex items-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-neutral-950 text-xs font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
             >
               <span>Build Client Quote</span>
               <ArrowUpRight className="w-4 h-4" />
             </button>
             <button
-              onClick={onOpenNewShift}
+              onClick={() => onOpenNewShift()}
               className="flex items-center gap-2 px-4 py-2.5 bg-neutral-800/80 hover:bg-neutral-800 text-white text-xs font-semibold rounded-lg border border-neutral-700 transition-colors cursor-pointer"
             >
               <Users className="w-4 h-4 text-amber-400" />

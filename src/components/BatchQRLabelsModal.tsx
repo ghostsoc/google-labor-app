@@ -105,9 +105,6 @@ export const BatchQRLabelsModal: React.FC<BatchQRLabelsModalProps> = ({
       return;
     }
 
-    const printWin = window.open('', '_blank', 'width=900,height=700');
-    if (!printWin) return;
-
     const labelsHtml = itemsToPrint
       .map(
         (item) => `
@@ -133,7 +130,7 @@ export const BatchQRLabelsModal: React.FC<BatchQRLabelsModalProps> = ({
       )
       .join('');
 
-    printWin.document.write(`
+    const printableHtml = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -238,16 +235,56 @@ export const BatchQRLabelsModal: React.FC<BatchQRLabelsModalProps> = ({
           <div class="labels-grid">
             ${labelsHtml}
           </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 750);
-            };
-          </script>
         </body>
       </html>
-    `);
-    printWin.document.close();
+    `;
+
+    try {
+      const printFrame = document.createElement('iframe');
+      printFrame.style.position = 'fixed';
+      printFrame.style.right = '0';
+      printFrame.style.bottom = '0';
+      printFrame.style.width = '0';
+      printFrame.style.height = '0';
+      printFrame.style.border = '0';
+      printFrame.style.visibility = 'hidden';
+      document.body.appendChild(printFrame);
+
+      let frameDoc: Document | null = null;
+      try {
+        frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document || null;
+      } catch {
+        frameDoc = null;
+      }
+
+      if (frameDoc) {
+        frameDoc.open();
+        frameDoc.write(printableHtml);
+        frameDoc.close();
+
+        setTimeout(() => {
+          try {
+            printFrame.contentWindow?.focus();
+            printFrame.contentWindow?.print();
+          } catch {
+            window.print();
+          } finally {
+            setTimeout(() => {
+              try {
+                if (document.body.contains(printFrame)) {
+                  document.body.removeChild(printFrame);
+                }
+              } catch {}
+            }, 1000);
+          }
+        }, 250);
+        return;
+      }
+    } catch {
+      // Fallback if sandboxed iframe policy blocks dynamic frames
+    }
+
+    window.print();
   };
 
   return (

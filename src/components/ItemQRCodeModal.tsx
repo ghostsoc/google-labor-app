@@ -106,12 +106,9 @@ export const ItemQRCodeModal: React.FC<ItemQRCodeModalProps> = ({
     document.body.removeChild(link);
   };
 
-  // Print individual road case label tag
+  // Print individual road case label tag safely in iframe
   const handlePrintTag = () => {
-    const printWindow = window.open('', '_blank', 'width=600,height=500');
-    if (!printWindow) return;
-
-    printWindow.document.write(`
+    const printableHtml = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -217,16 +214,56 @@ export const ItemQRCodeModal: React.FC<ItemQRCodeModalProps> = ({
               </div>
             </div>
           </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 750);
-            };
-          </script>
         </body>
       </html>
-    `);
-    printWindow.document.close();
+    `;
+
+    try {
+      const printFrame = document.createElement('iframe');
+      printFrame.style.position = 'fixed';
+      printFrame.style.right = '0';
+      printFrame.style.bottom = '0';
+      printFrame.style.width = '0';
+      printFrame.style.height = '0';
+      printFrame.style.border = '0';
+      printFrame.style.visibility = 'hidden';
+      document.body.appendChild(printFrame);
+
+      let frameDoc: Document | null = null;
+      try {
+        frameDoc = printFrame.contentDocument || printFrame.contentWindow?.document || null;
+      } catch {
+        frameDoc = null;
+      }
+
+      if (frameDoc) {
+        frameDoc.open();
+        frameDoc.write(printableHtml);
+        frameDoc.close();
+
+        setTimeout(() => {
+          try {
+            printFrame.contentWindow?.focus();
+            printFrame.contentWindow?.print();
+          } catch {
+            window.print();
+          } finally {
+            setTimeout(() => {
+              try {
+                if (document.body.contains(printFrame)) {
+                  document.body.removeChild(printFrame);
+                }
+              } catch {}
+            }, 1000);
+          }
+        }, 250);
+        return;
+      }
+    } catch {
+      // Fallback
+    }
+
+    window.print();
   };
 
   const copyPayloadToClipboard = () => {
