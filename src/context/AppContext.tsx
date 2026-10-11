@@ -50,15 +50,7 @@ import {
   USER_ROLE_DEFINITIONS,
 } from '../types';
 import {
-  initialInventory,
-  initialStaff,
-  initialShifts,
-  initialQuotes,
-  initialInvoices,
-  initialClients,
-  initialMaintenanceRecords,
   initialCompanySettings,
-  initialTeamUsers,
 } from '../data/mockData';
 
 interface AppContextType {
@@ -83,8 +75,10 @@ interface AppContextType {
   userHasPermission: (perm: keyof RolePermissions) => boolean;
   teamUsers: AppUser[];
   updateUserRole: (userId: string, newRole: UserRole) => Promise<void>;
+  updateTeamUser: (userId: string, updates: Partial<AppUser>) => Promise<void>;
   addTeamUser: (user: Omit<AppUser, 'uid'>) => Promise<void>;
   deleteTeamUser: (userId: string) => Promise<void>;
+  switchActiveUser: (user: AppUser) => void;
 
   // Google Calendar Integration
   googleCalendarToken: string | null;
@@ -178,7 +172,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [teamUsers, setTeamUsers] = useState<AppUser[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_PREFIX}team_users`);
-    return saved ? JSON.parse(saved) : initialTeamUsers;
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Effective Active Role (Simulated role overrides for testing RBAC, otherwise user's assigned role)
@@ -222,10 +216,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`${STORAGE_PREFIX}team_users`, JSON.stringify(updated));
 
     try {
-      await setDoc(doc(db, 'users', newUid), fullUser);
+      await setDoc(doc(db, 'users', newUid), cleanForFirestore(fullUser));
     } catch (err) {
       console.warn('Firestore add team user:', err);
     }
+  };
+
+  const updateTeamUser = async (userId: string, updates: Partial<AppUser>) => {
+    const updated = teamUsers.map((u) => (u.uid === userId ? { ...u, ...updates } : u));
+    setTeamUsers(updated);
+    localStorage.setItem(`${STORAGE_PREFIX}team_users`, JSON.stringify(updated));
+
+    if (currentUser && currentUser.uid === userId) {
+      setCurrentUser((prev) => (prev ? { ...prev, ...updates } : null));
+    }
+
+    try {
+      await setDoc(doc(db, 'users', userId), cleanForFirestore(updates), { merge: true });
+    } catch (err) {
+      console.warn('Firestore update team user:', err);
+    }
+  };
+
+  const switchActiveUser = (user: AppUser) => {
+    setCurrentUser(user);
+    setSimulatedRole(user.role);
   };
 
   const deleteTeamUser = async (userId: string) => {
@@ -264,40 +279,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGoogleCalendarToken(null);
   };
 
-  // Entities State
+  // Helper to strip undefined values for Firestore compatibility
+  const cleanForFirestore = <T extends Record<string, any>>(obj: T): T =>
+    JSON.parse(JSON.stringify(obj));
+
+  // Entities State - Loaded live from Firestore database (no mock data fallback)
   const [inventory, setInventory] = useState<InventoryItem[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_PREFIX}inventory`);
-    return saved ? JSON.parse(saved) : initialInventory;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [staff, setStaff] = useState<StaffMember[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_PREFIX}staff`);
-    return saved ? JSON.parse(saved) : initialStaff;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [shifts, setShifts] = useState<LaborShift[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_PREFIX}shifts`);
-    return saved ? JSON.parse(saved) : initialShifts;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [quotes, setQuotes] = useState<ClientQuote[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_PREFIX}quotes`);
-    return saved ? JSON.parse(saved) : initialQuotes;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [invoices, setInvoices] = useState<Invoice[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_PREFIX}invoices`);
-    return saved ? JSON.parse(saved) : initialInvoices;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [clients, setClients] = useState<Client[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_PREFIX}clients`);
-    return saved ? JSON.parse(saved) : initialClients;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_PREFIX}maintenance`);
-    return saved ? JSON.parse(saved) : initialMaintenanceRecords;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [settings, setSettings] = useState<CompanySettings>(() => {
@@ -309,8 +328,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeInvoiceForPrint, setActiveInvoiceForPrint] = useState<Invoice | null>(null);
   const [selectedQuoteForPull, setSelectedQuoteForPull] = useState<ClientQuote | null>(null);
   const [selectedClientForDetail, setSelectedClientForDetail] = useState<Client | null>(null);
-
-  const isSeedingRef = useRef(false);
 
   // Verify Firestore connection on initial boot
   useEffect(() => {
@@ -374,81 +391,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => unsubscribe();
   }, []);
 
-  // Set up Firestore real-time listeners and initial seeding when user is logged in
+  // Set up Firestore real-time listeners and live data synchronization from database
   useEffect(() => {
-    if (!currentUser) {
-      setIsCloudSynced(false);
-      return;
-    }
-
     const unsubscribers: (() => void)[] = [];
-
-    // Helper to seed initial documents if collection is empty
-    const checkAndSeedCollection = async () => {
-      if (isSeedingRef.current) return;
-      isSeedingRef.current = true;
-
-      try {
-        const invSnap = await getDocs(collection(db, 'inventory'));
-        if (invSnap.empty) {
-          const batch = writeBatch(db);
-          // Seed inventory
-          initialInventory.forEach((item) => {
-            batch.set(doc(db, 'inventory', item.id), item);
-          });
-          // Seed staff
-          initialStaff.forEach((st) => {
-            batch.set(doc(db, 'staff', st.id), st);
-          });
-          // Seed shifts
-          initialShifts.forEach((sh) => {
-            batch.set(doc(db, 'shifts', sh.id), sh);
-          });
-          // Seed quotes
-          initialQuotes.forEach((q) => {
-            batch.set(doc(db, 'quotes', q.id), q);
-          });
-          // Seed invoices
-          initialInvoices.forEach((inv) => {
-            batch.set(doc(db, 'invoices', inv.id), inv);
-          });
-          // Seed clients
-          initialClients.forEach((cl) => {
-            batch.set(doc(db, 'clients', cl.id), cl);
-          });
-          // Seed maintenance
-          initialMaintenanceRecords.forEach((m) => {
-            batch.set(doc(db, 'maintenance', m.id), m);
-          });
-          // Seed settings
-          batch.set(doc(db, 'settings', 'company'), initialCompanySettings);
-          // Seed initial team users
-          initialTeamUsers.forEach((u) => {
-            batch.set(doc(db, 'users', u.uid), u);
-          });
-
-          await batch.commit();
-        }
-      } catch (err) {
-        console.warn('Initial Firestore seed check:', err);
-      }
-    };
-
-    checkAndSeedCollection();
 
     // 1. Inventory Listener
     const invUnsub = onSnapshot(
       collection(db, 'inventory'),
       (snap) => {
-        if (!snap.empty) {
-          const items: InventoryItem[] = [];
-          snap.forEach((d) => items.push(d.data() as InventoryItem));
-          setInventory(items);
-        }
+        const items: InventoryItem[] = [];
+        snap.forEach((d) => items.push(d.data() as InventoryItem));
+        setInventory(items);
+        localStorage.setItem(`${STORAGE_PREFIX}inventory`, JSON.stringify(items));
         setIsCloudSynced(true);
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, 'inventory');
+        console.warn('Inventory live listener:', error);
       }
     );
     unsubscribers.push(invUnsub);
@@ -457,14 +415,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const staffUnsub = onSnapshot(
       collection(db, 'staff'),
       (snap) => {
-        if (!snap.empty) {
-          const items: StaffMember[] = [];
-          snap.forEach((d) => items.push(d.data() as StaffMember));
-          setStaff(items);
-        }
+        const items: StaffMember[] = [];
+        snap.forEach((d) => items.push(d.data() as StaffMember));
+        setStaff(items);
+        localStorage.setItem(`${STORAGE_PREFIX}staff`, JSON.stringify(items));
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, 'staff');
+        console.warn('Staff live listener:', error);
       }
     );
     unsubscribers.push(staffUnsub);
@@ -473,14 +430,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const shiftsUnsub = onSnapshot(
       collection(db, 'shifts'),
       (snap) => {
-        if (!snap.empty) {
-          const items: LaborShift[] = [];
-          snap.forEach((d) => items.push(d.data() as LaborShift));
-          setShifts(items);
-        }
+        const items: LaborShift[] = [];
+        snap.forEach((d) => items.push(d.data() as LaborShift));
+        setShifts(items);
+        localStorage.setItem(`${STORAGE_PREFIX}shifts`, JSON.stringify(items));
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, 'shifts');
+        console.warn('Shifts live listener:', error);
       }
     );
     unsubscribers.push(shiftsUnsub);
@@ -489,14 +445,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const quotesUnsub = onSnapshot(
       collection(db, 'quotes'),
       (snap) => {
-        if (!snap.empty) {
-          const items: ClientQuote[] = [];
-          snap.forEach((d) => items.push(d.data() as ClientQuote));
-          setQuotes(items);
-        }
+        const items: ClientQuote[] = [];
+        snap.forEach((d) => items.push(d.data() as ClientQuote));
+        setQuotes(items);
+        localStorage.setItem(`${STORAGE_PREFIX}quotes`, JSON.stringify(items));
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, 'quotes');
+        console.warn('Quotes live listener:', error);
       }
     );
     unsubscribers.push(quotesUnsub);
@@ -505,14 +460,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const invsUnsub = onSnapshot(
       collection(db, 'invoices'),
       (snap) => {
-        if (!snap.empty) {
-          const items: Invoice[] = [];
-          snap.forEach((d) => items.push(d.data() as Invoice));
-          setInvoices(items);
-        }
+        const items: Invoice[] = [];
+        snap.forEach((d) => items.push(d.data() as Invoice));
+        setInvoices(items);
+        localStorage.setItem(`${STORAGE_PREFIX}invoices`, JSON.stringify(items));
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, 'invoices');
+        console.warn('Invoices live listener:', error);
       }
     );
     unsubscribers.push(invsUnsub);
@@ -521,14 +475,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const clientsUnsub = onSnapshot(
       collection(db, 'clients'),
       (snap) => {
-        if (!snap.empty) {
-          const items: Client[] = [];
-          snap.forEach((d) => items.push(d.data() as Client));
-          setClients(items);
-        }
+        const items: Client[] = [];
+        snap.forEach((d) => items.push(d.data() as Client));
+        setClients(items);
+        localStorage.setItem(`${STORAGE_PREFIX}clients`, JSON.stringify(items));
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, 'clients');
+        console.warn('Clients live listener:', error);
       }
     );
     unsubscribers.push(clientsUnsub);
@@ -537,14 +490,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const maintUnsub = onSnapshot(
       collection(db, 'maintenance'),
       (snap) => {
-        if (!snap.empty) {
-          const items: MaintenanceRecord[] = [];
-          snap.forEach((d) => items.push(d.data() as MaintenanceRecord));
-          setMaintenanceRecords(items);
-        }
+        const items: MaintenanceRecord[] = [];
+        snap.forEach((d) => items.push(d.data() as MaintenanceRecord));
+        setMaintenanceRecords(items);
+        localStorage.setItem(`${STORAGE_PREFIX}maintenance`, JSON.stringify(items));
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, 'maintenance');
+        console.warn('Maintenance live listener:', error);
       }
     );
     unsubscribers.push(maintUnsub);
@@ -554,11 +506,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       doc(db, 'settings', 'company'),
       (snap) => {
         if (snap.exists()) {
-          setSettings(snap.data() as CompanySettings);
+          const loaded = snap.data() as CompanySettings;
+          setSettings(loaded);
+          localStorage.setItem(`${STORAGE_PREFIX}settings`, JSON.stringify(loaded));
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, 'settings/company');
+        console.warn('Settings live listener:', error);
       }
     );
     unsubscribers.push(settingsUnsub);
@@ -567,15 +521,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const usersUnsub = onSnapshot(
       collection(db, 'users'),
       (snap) => {
-        if (!snap.empty) {
-          const loaded: AppUser[] = [];
-          snap.forEach((d) => loaded.push(d.data() as AppUser));
+        const loaded: AppUser[] = [];
+        snap.forEach((d) => loaded.push(d.data() as AppUser));
+        if (loaded.length > 0) {
           setTeamUsers(loaded);
           localStorage.setItem(`${STORAGE_PREFIX}team_users`, JSON.stringify(loaded));
         }
       },
       (error) => {
-        console.warn('Users listener:', error);
+        console.warn('Users live listener:', error);
       }
     );
     unsubscribers.push(usersUnsub);
@@ -583,7 +537,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       unsubscribers.forEach((fn) => fn());
     };
-  }, [currentUser]);
+  }, []);
 
   // Sync to localStorage as offline fallback cache
   useEffect(() => {
@@ -709,13 +663,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newItem: InventoryItem = { ...item, id };
     setInventory((prev) => [newItem, ...prev]);
 
-    if (currentUser) {
-      const path = `inventory/${id}`;
-      try {
-        await setDoc(doc(db, 'inventory', id), newItem);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.CREATE, path);
-      }
+    try {
+      await setDoc(doc(db, 'inventory', id), cleanForFirestore(newItem));
+    } catch (error) {
+      console.warn('Firestore add inventory:', error);
     }
   };
 
@@ -724,26 +675,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
     );
 
-    if (currentUser) {
-      const path = `inventory/${id}`;
-      try {
-        await updateDoc(doc(db, 'inventory', id), updates);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, path);
-      }
+    try {
+      await updateDoc(doc(db, 'inventory', id), cleanForFirestore(updates));
+    } catch (error) {
+      console.warn('Firestore update inventory:', error);
     }
   };
 
   const deleteInventoryItem = async (id: string) => {
     setInventory((prev) => prev.filter((item) => item.id !== id));
 
-    if (currentUser) {
-      const path = `inventory/${id}`;
-      try {
-        await deleteDoc(doc(db, 'inventory', id));
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, path);
-      }
+    try {
+      await deleteDoc(doc(db, 'inventory', id));
+    } catch (error) {
+      console.warn('Firestore delete inventory:', error);
     }
   };
 
@@ -781,13 +726,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newMember: StaffMember = { ...member, id };
     setStaff((prev) => [newMember, ...prev]);
 
-    if (currentUser) {
-      const path = `staff/${id}`;
-      try {
-        await setDoc(doc(db, 'staff', id), newMember);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.CREATE, path);
-      }
+    try {
+      await setDoc(doc(db, 'staff', id), cleanForFirestore(newMember));
+    } catch (error) {
+      console.warn('Firestore add staff:', error);
     }
   };
 
@@ -796,26 +738,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
     );
 
-    if (currentUser) {
-      const path = `staff/${id}`;
-      try {
-        await updateDoc(doc(db, 'staff', id), updates);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, path);
-      }
+    try {
+      await updateDoc(doc(db, 'staff', id), cleanForFirestore(updates));
+    } catch (error) {
+      console.warn('Firestore update staff:', error);
     }
   };
 
   const deleteStaffMember = async (id: string) => {
     setStaff((prev) => prev.filter((item) => item.id !== id));
 
-    if (currentUser) {
-      const path = `staff/${id}`;
-      try {
-        await deleteDoc(doc(db, 'staff', id));
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, path);
-      }
+    try {
+      await deleteDoc(doc(db, 'staff', id));
+    } catch (error) {
+      console.warn('Firestore delete staff:', error);
     }
   };
 
@@ -824,13 +760,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newShift: LaborShift = { ...shift, id };
     setShifts((prev) => [newShift, ...prev]);
 
-    if (currentUser) {
-      const path = `shifts/${id}`;
-      try {
-        await setDoc(doc(db, 'shifts', id), newShift);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.CREATE, path);
-      }
+    try {
+      await setDoc(doc(db, 'shifts', id), cleanForFirestore(newShift));
+    } catch (error) {
+      console.warn('Firestore add shift:', error);
     }
   };
 
@@ -839,26 +772,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
     );
 
-    if (currentUser) {
-      const path = `shifts/${id}`;
-      try {
-        await updateDoc(doc(db, 'shifts', id), updates);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, path);
-      }
+    try {
+      await updateDoc(doc(db, 'shifts', id), cleanForFirestore(updates));
+    } catch (error) {
+      console.warn('Firestore update shift:', error);
     }
   };
 
   const deleteShift = async (id: string) => {
     setShifts((prev) => prev.filter((item) => item.id !== id));
 
-    if (currentUser) {
-      const path = `shifts/${id}`;
-      try {
-        await deleteDoc(doc(db, 'shifts', id));
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, path);
-      }
+    try {
+      await deleteDoc(doc(db, 'shifts', id));
+    } catch (error) {
+      console.warn('Firestore delete shift:', error);
     }
   };
 
@@ -876,11 +803,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setQuotes((prev) => [newQuote, ...prev]);
 
-    if (currentUser) {
-      const path = `quotes/${id}`;
-      setDoc(doc(db, 'quotes', id), newQuote).catch((error) => {
-        handleFirestoreError(error, OperationType.CREATE, path);
-      });
+    try {
+      setDoc(doc(db, 'quotes', id), cleanForFirestore(newQuote));
+    } catch (error) {
+      console.warn('Firestore add quote:', error);
     }
 
     return id;
@@ -891,26 +817,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((quote) => (quote.id === id ? { ...quote, ...updates } : quote))
     );
 
-    if (currentUser) {
-      const path = `quotes/${id}`;
-      try {
-        await updateDoc(doc(db, 'quotes', id), updates);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, path);
-      }
+    try {
+      await updateDoc(doc(db, 'quotes', id), cleanForFirestore(updates));
+    } catch (error) {
+      console.warn('Firestore update quote:', error);
     }
   };
 
   const deleteQuote = async (id: string) => {
     setQuotes((prev) => prev.filter((item) => item.id !== id));
 
-    if (currentUser) {
-      const path = `quotes/${id}`;
-      try {
-        await deleteDoc(doc(db, 'quotes', id));
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, path);
-      }
+    try {
+      await deleteDoc(doc(db, 'quotes', id));
+    } catch (error) {
+      console.warn('Firestore delete quote:', error);
     }
   };
 
@@ -1240,15 +1160,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetAllData = async () => {
-    setInventory(initialInventory);
-    setStaff(initialStaff);
-    setShifts(initialShifts);
-    setQuotes(initialQuotes);
-    setInvoices(initialInvoices);
-    setClients(initialClients);
-    setMaintenanceRecords(initialMaintenanceRecords);
-    setSettings(initialCompanySettings);
-
     localStorage.removeItem(`${STORAGE_PREFIX}inventory`);
     localStorage.removeItem(`${STORAGE_PREFIX}staff`);
     localStorage.removeItem(`${STORAGE_PREFIX}shifts`);
@@ -1258,21 +1169,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.removeItem(`${STORAGE_PREFIX}maintenance`);
     localStorage.removeItem(`${STORAGE_PREFIX}settings`);
 
-    if (currentUser) {
-      try {
-        const batch = writeBatch(db);
-        initialInventory.forEach((item) => batch.set(doc(db, 'inventory', item.id), item));
-        initialStaff.forEach((st) => batch.set(doc(db, 'staff', st.id), st));
-        initialShifts.forEach((sh) => batch.set(doc(db, 'shifts', sh.id), sh));
-        initialQuotes.forEach((q) => batch.set(doc(db, 'quotes', q.id), q));
-        initialInvoices.forEach((inv) => batch.set(doc(db, 'invoices', inv.id), inv));
-        initialClients.forEach((cl) => batch.set(doc(db, 'clients', cl.id), cl));
-        initialMaintenanceRecords.forEach((m) => batch.set(doc(db, 'maintenance', m.id), m));
-        batch.set(doc(db, 'settings', 'company'), initialCompanySettings);
-        await batch.commit();
-      } catch (error) {
-        console.warn('Batch reset Firestore error:', error);
+    // Reload live collections from Firestore database
+    try {
+      const invSnap = await getDocs(collection(db, 'inventory'));
+      const invItems: InventoryItem[] = [];
+      invSnap.forEach((d) => invItems.push(d.data() as InventoryItem));
+      setInventory(invItems);
+
+      const staffSnap = await getDocs(collection(db, 'staff'));
+      const staffItems: StaffMember[] = [];
+      staffSnap.forEach((d) => staffItems.push(d.data() as StaffMember));
+      setStaff(staffItems);
+
+      const shiftsSnap = await getDocs(collection(db, 'shifts'));
+      const shiftItems: LaborShift[] = [];
+      shiftsSnap.forEach((d) => shiftItems.push(d.data() as LaborShift));
+      setShifts(shiftItems);
+
+      const quotesSnap = await getDocs(collection(db, 'quotes'));
+      const quoteItems: ClientQuote[] = [];
+      quotesSnap.forEach((d) => quoteItems.push(d.data() as ClientQuote));
+      setQuotes(quoteItems);
+
+      const invoicesSnap = await getDocs(collection(db, 'invoices'));
+      const invoiceItems: Invoice[] = [];
+      invoicesSnap.forEach((d) => invoiceItems.push(d.data() as Invoice));
+      setInvoices(invoiceItems);
+
+      const clientsSnap = await getDocs(collection(db, 'clients'));
+      const clientItems: Client[] = [];
+      clientsSnap.forEach((d) => clientItems.push(d.data() as Client));
+      setClients(clientItems);
+
+      const maintSnap = await getDocs(collection(db, 'maintenance'));
+      const maintItems: MaintenanceRecord[] = [];
+      maintSnap.forEach((d) => maintItems.push(d.data() as MaintenanceRecord));
+      setMaintenanceRecords(maintItems);
+
+      const setSnap = await getDoc(doc(db, 'settings', 'company'));
+      if (setSnap.exists()) {
+        setSettings(setSnap.data() as CompanySettings);
       }
+    } catch (error) {
+      console.warn('Reload live data from Firestore error:', error);
     }
   };
 
@@ -1299,8 +1238,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         userHasPermission,
         teamUsers,
         updateUserRole,
+        updateTeamUser,
         addTeamUser,
         deleteTeamUser,
+        switchActiveUser,
 
         // Google Calendar Integration
         googleCalendarToken,

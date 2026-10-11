@@ -17,7 +17,11 @@ import {
   X,
   History,
   Trash2,
+  FileSpreadsheet,
+  Mail,
 } from 'lucide-react';
+import { GoogleSheetsModal } from './GoogleSheetsModal';
+import { GmailComposeModal, GmailComposePrefill } from './GmailComposeModal';
 
 export const InvoicesManager: React.FC = () => {
   const {
@@ -31,6 +35,11 @@ export const InvoicesManager: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
+
+  // Google Workspace modals state
+  const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
+  const [isGmailModalOpen, setIsGmailModalOpen] = useState(false);
+  const [gmailPrefill, setGmailPrefill] = useState<GmailComposePrefill | null>(null);
 
   // Record Payment Modal State
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
@@ -106,6 +115,17 @@ export const InvoicesManager: React.FC = () => {
           <p className="text-xs text-neutral-400 mt-1">
             Convert accepted event quotes, record settlement payments, track Net terms, and manage receivables
           </p>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => setIsSheetsModalOpen(true)}
+            title="Export Billing Ledger to Google Sheets"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-300 bg-neutral-800 hover:bg-neutral-700 hover:text-emerald-300 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Sync Sheets</span>
+          </button>
         </div>
       </div>
 
@@ -341,6 +361,22 @@ export const InvoicesManager: React.FC = () => {
                           <Printer className="w-3.5 h-3.5" />
                         </button>
 
+                        {/* Email Invoice via Gmail */}
+                        <button
+                          onClick={() => {
+                            setGmailPrefill({
+                              templateType: 'invoice',
+                              invoiceId: inv.id,
+                              to: inv.clientEmail,
+                            });
+                            setIsGmailModalOpen(true);
+                          }}
+                          title="Email Invoice to Client via Gmail"
+                          className="p-1.5 text-neutral-400 hover:text-red-400 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                        >
+                          <Mail className="w-3.5 h-3.5" />
+                        </button>
+
                         {/* Delete invoice */}
                         <button
                           onClick={() => {
@@ -556,6 +592,20 @@ export const InvoicesManager: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Google Sheets Billing Ledger Export Modal */}
+      <GoogleSheetsModal
+        isOpen={isSheetsModalOpen}
+        onClose={() => setIsSheetsModalOpen(false)}
+        initialTab="invoices"
+      />
+
+      {/* Gmail Compose Modal for Commercial Invoices */}
+      <GmailComposeModal
+        isOpen={isGmailModalOpen}
+        onClose={() => setIsGmailModalOpen(false)}
+        prefill={gmailPrefill}
+      />
     </div>
   );
 };

@@ -36,16 +36,26 @@ export async function uploadFileToStorage(path: string, file: File | Blob): Prom
   return await getDownloadURL(snapshot.ref);
 }
 
-export const CALENDAR_SCOPES = [
+export const WORKSPACE_SCOPES = [
   'https://www.googleapis.com/auth/calendar',
   'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://mail.google.com/',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.compose',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/contacts',
+  'https://www.googleapis.com/auth/contacts.readonly',
 ];
+
+export const CALENDAR_SCOPES = WORKSPACE_SCOPES;
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
   prompt: 'select_account',
 });
-CALENDAR_SCOPES.forEach((scope) => googleProvider.addScope(scope));
+WORKSPACE_SCOPES.forEach((scope) => googleProvider.addScope(scope));
 
 // In-memory token cache (never stored in localStorage per security guidelines)
 let cachedAccessToken: string | null = null;

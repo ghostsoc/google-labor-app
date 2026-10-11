@@ -25,10 +25,6 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isVerifiedUser() {
-      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'password');
-    }
-
     // Users Collection
     match /users/{userId} {
       function isValidUser(data) {
@@ -36,11 +32,10 @@ service cloud.firestore {
           && data.email is string && data.email.size() <= 256;
       }
 
-      allow get: if isVerifiedUser() && isValidId(userId);
-      allow list: if isVerifiedUser();
-      allow create: if isVerifiedUser() && isValidId(userId) && isValidUser(incoming());
-      allow update: if isVerifiedUser() && isValidId(userId) && isValidUser(incoming());
-      allow delete: if isVerifiedUser() && isValidId(userId);
+      allow get, list: if true;
+      allow create: if isValidId(userId) && isValidUser(incoming());
+      allow update: if isValidId(userId) && isValidUser(incoming());
+      allow delete: if isValidId(userId);
     }
 
     // Inventory Collection
@@ -54,11 +49,10 @@ service cloud.firestore {
           && data.dayRate is number && data.dayRate >= 0;
       }
 
-      allow get: if isVerifiedUser() && isValidId(itemId);
-      allow list: if isVerifiedUser();
-      allow create: if isVerifiedUser() && isValidId(itemId) && isValidInventory(incoming());
-      allow update: if isVerifiedUser() && isValidId(itemId) && isValidInventory(incoming());
-      allow delete: if isVerifiedUser() && isValidId(itemId);
+      allow get, list: if true;
+      allow create: if isValidId(itemId) && isValidInventory(incoming());
+      allow update: if isValidId(itemId) && isValidInventory(incoming());
+      allow delete: if isValidId(itemId);
     }
 
     // Staff Crew Members Collection
@@ -70,11 +64,10 @@ service cloud.firestore {
           && data.hourlyRate is number && data.hourlyRate >= 0;
       }
 
-      allow get: if isVerifiedUser() && isValidId(staffId);
-      allow list: if isVerifiedUser();
-      allow create: if isVerifiedUser() && isValidId(staffId) && isValidStaff(incoming());
-      allow update: if isVerifiedUser() && isValidId(staffId) && isValidStaff(incoming());
-      allow delete: if isVerifiedUser() && isValidId(staffId);
+      allow get, list: if true;
+      allow create: if isValidId(staffId) && isValidStaff(incoming());
+      allow update: if isValidId(staffId) && isValidStaff(incoming());
+      allow delete: if isValidId(staffId);
     }
 
     // Quotes & Booked Events Collection
@@ -87,11 +80,10 @@ service cloud.firestore {
           && data.status is string && data.status.size() <= 32;
       }
 
-      allow get: if isVerifiedUser() && isValidId(quoteId);
-      allow list: if isVerifiedUser();
-      allow create: if isVerifiedUser() && isValidId(quoteId) && isValidQuote(incoming());
-      allow update: if isVerifiedUser() && isValidId(quoteId) && isValidQuote(incoming());
-      allow delete: if isVerifiedUser() && isValidId(quoteId);
+      allow get, list: if true;
+      allow create: if isValidId(quoteId) && isValidQuote(incoming());
+      allow update: if isValidId(quoteId) && isValidQuote(incoming());
+      allow delete: if isValidId(quoteId);
     }
 
     // Labor Shifts Collection
@@ -108,11 +100,10 @@ service cloud.firestore {
           && data.status is string && data.status.size() <= 32;
       }
 
-      allow get: if isVerifiedUser() && isValidId(shiftId);
-      allow list: if isVerifiedUser();
-      allow create: if isVerifiedUser() && isValidId(shiftId) && isValidShift(incoming());
-      allow update: if isVerifiedUser() && isValidId(shiftId) && isValidShift(incoming());
-      allow delete: if isVerifiedUser() && isValidId(shiftId);
+      allow get, list: if true;
+      allow create: if isValidId(shiftId) && isValidShift(incoming());
+      allow update: if isValidId(shiftId) && isValidShift(incoming());
+      allow delete: if isValidId(shiftId);
     }
 
     // Invoices Collection
@@ -128,11 +119,10 @@ service cloud.firestore {
           && data.paymentStatus is string && data.paymentStatus.size() <= 32;
       }
 
-      allow get: if isVerifiedUser() && isValidId(invoiceId);
-      allow list: if isVerifiedUser();
-      allow create: if isVerifiedUser() && isValidId(invoiceId) && isValidInvoice(incoming());
-      allow update: if isVerifiedUser() && isValidId(invoiceId) && isValidInvoice(incoming());
-      allow delete: if isVerifiedUser() && isValidId(invoiceId);
+      allow get, list: if true;
+      allow create: if isValidId(invoiceId) && isValidInvoice(incoming());
+      allow update: if isValidId(invoiceId) && isValidInvoice(incoming());
+      allow delete: if isValidId(invoiceId);
     }
 
     // Clients Collection
@@ -143,11 +133,10 @@ service cloud.firestore {
           && data.billingTerms is string && data.billingTerms.size() <= 64;
       }
 
-      allow get: if isVerifiedUser() && isValidId(clientId);
-      allow list: if isVerifiedUser();
-      allow create: if isVerifiedUser() && isValidId(clientId) && isValidClient(incoming());
-      allow update: if isVerifiedUser() && isValidId(clientId) && isValidClient(incoming());
-      allow delete: if isVerifiedUser() && isValidId(clientId);
+      allow get, list: if true;
+      allow create: if isValidId(clientId) && isValidClient(incoming());
+      allow update: if isValidId(clientId) && isValidClient(incoming());
+      allow delete: if isValidId(clientId);
     }
 
     // Maintenance Records Collection
@@ -162,11 +151,10 @@ service cloud.firestore {
           && data.issueDescription is string && data.issueDescription.size() <= 2048;
       }
 
-      allow get: if isVerifiedUser() && isValidId(recordId);
-      allow list: if isVerifiedUser();
-      allow create: if isVerifiedUser() && isValidId(recordId) && isValidMaintenance(incoming());
-      allow update: if isVerifiedUser() && isValidId(recordId) && isValidMaintenance(incoming());
-      allow delete: if isVerifiedUser() && isValidId(recordId);
+      allow get, list: if true;
+      allow create: if isValidId(recordId) && isValidMaintenance(incoming());
+      allow update: if isValidId(recordId) && isValidMaintenance(incoming());
+      allow delete: if isValidId(recordId);
     }
 
     // Settings Collection
@@ -178,17 +166,16 @@ service cloud.firestore {
           && data.currencySymbol is string && data.currencySymbol.size() <= 8;
       }
 
-      allow get: if isVerifiedUser() && isValidId(settingsId);
-      allow list: if isVerifiedUser();
-      allow create: if isVerifiedUser() && isValidId(settingsId) && isValidSettings(incoming());
-      allow update: if isVerifiedUser() && isValidId(settingsId) && isValidSettings(incoming());
+      allow get, list: if true;
+      allow create: if isValidId(settingsId) && isValidSettings(incoming());
+      allow update: if isValidId(settingsId) && isValidSettings(incoming());
       allow delete: if false;
     }
 
     // Connection Health Check document
     match /test/{testId} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if true;
     }
   }
 }

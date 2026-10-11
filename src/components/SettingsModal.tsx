@@ -26,7 +26,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   const handleReset = () => {
     if (!canEdit) return;
-    if (confirm('Reset all inventory, shifts, clients, maintenance, and quotes to demo defaults?')) {
+    if (confirm('Re-sync and reload all live records directly from the cloud database?')) {
       resetAllData();
       onClose();
     }
@@ -148,7 +148,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               className="flex items-center gap-1.5 px-3 py-2 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded-lg border border-rose-900/60 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Reset Demo Seed Data</span>
+              <span>Re-sync Live Database</span>
             </button>
 
             <div className="flex items-center gap-2">

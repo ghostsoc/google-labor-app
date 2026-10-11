@@ -25,7 +25,9 @@ import {
   Tag,
   Printer,
   ArrowRight,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { GoogleSheetsModal } from './GoogleSheetsModal';
 
 export const InventoryManager: React.FC = () => {
   const {
@@ -52,6 +54,7 @@ export const InventoryManager: React.FC = () => {
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [maintenanceTargetItem, setMaintenanceTargetItem] = useState<InventoryItem | null>(null);
   const [repairCountInput, setRepairCountInput] = useState<number>(1);
@@ -261,11 +264,22 @@ export const InventoryManager: React.FC = () => {
           </button>
           <button
             onClick={handleExportInventoryCSV}
-            title="Download CSV report of current inventory"
+            title={`Download CSV report of ${filteredItems.length} inventory items`}
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-300 bg-neutral-800 hover:bg-neutral-700 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-amber-400" />
             <span>Export CSV</span>
+            <span className="text-[10px] bg-neutral-900 text-neutral-400 px-1.5 py-0.5 rounded border border-neutral-700/60 font-mono">
+              {filteredItems.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setIsSheetsModalOpen(true)}
+            title="Export Fleet to Google Sheets or Import Equipment Catalog"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-300 bg-neutral-800 hover:bg-neutral-700 hover:text-emerald-300 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Google Sheets</span>
           </button>
           <button
             onClick={() => setActiveTab('maintenance')}
@@ -848,6 +862,13 @@ export const InventoryManager: React.FC = () => {
         isOpen={isBatchQROpen}
         onClose={() => setIsBatchQROpen(false)}
         inventory={filteredItems}
+      />
+
+      {/* Google Sheets Sync & Import Modal */}
+      <GoogleSheetsModal
+        isOpen={isSheetsModalOpen}
+        onClose={() => setIsSheetsModalOpen(false)}
+        initialTab="inventory"
       />
     </div>
   );

@@ -41,7 +41,12 @@ import {
   ArrowRight,
   TrendingUp,
   Package,
+  FileSpreadsheet,
+  Contact,
 } from 'lucide-react';
+import { GoogleSheetsModal } from './GoogleSheetsModal';
+import { GmailComposeModal, GmailComposePrefill } from './GmailComposeModal';
+import { GoogleContactsModal } from './GoogleContactsModal';
 
 interface StaffSchedulerProps {
   initialPrefill?: {
@@ -86,6 +91,10 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
+  const [isGmailModalOpen, setIsGmailModalOpen] = useState(false);
+  const [gmailPrefill, setGmailPrefill] = useState<GmailComposePrefill | null>(null);
+  const [isContactsModalOpen, setIsContactsModalOpen] = useState(false);
   const [callSheetEvent, setCallSheetEvent] = useState<string | null>(null);
   const [selectedShiftForGear, setSelectedShiftForGear] = useState<LaborShift | null>(null);
   const [selectedShiftForLaborDetail, setSelectedShiftForLaborDetail] = useState<ShiftLaborCostDetails | null>(null);
@@ -383,6 +392,22 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsSheetsModalOpen(true)}
+            title="Export Labor Schedule & Shifts to Google Sheets"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-300 bg-neutral-800 hover:bg-neutral-700 hover:text-emerald-300 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Sync Sheets</span>
+          </button>
+          <button
+            onClick={() => setIsContactsModalOpen(true)}
+            title="Import Technicians from Google Contacts or Export Roster"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-300 bg-neutral-800 hover:bg-neutral-700 hover:text-blue-300 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
+          >
+            <Contact className="w-3.5 h-3.5 text-blue-400" />
+            <span>Google Contacts</span>
+          </button>
           <button
             onClick={() => setIsCalculatorOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-300 bg-neutral-800 hover:bg-neutral-700 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
@@ -820,6 +845,19 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
                             className="p-1 text-neutral-400 hover:text-amber-400 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
                           >
                             <Package className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setGmailPrefill({
+                                templateType: 'shift',
+                                shiftId: shift.id,
+                              });
+                              setIsGmailModalOpen(true);
+                            }}
+                            title="Email Shift Call Sheet to Technician via Gmail"
+                            className="p-1 text-neutral-400 hover:text-red-400 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                          >
+                            <Mail className="w-3.5 h-3.5" />
                           </button>
                           {shift.status !== 'Confirmed' && (
                             <button
@@ -1418,6 +1456,27 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
           setSelectedTimelineDate(date);
           setActiveSubTab('timeline');
         }}
+      />
+
+      {/* Google Sheets Sync Modal */}
+      <GoogleSheetsModal
+        isOpen={isSheetsModalOpen}
+        onClose={() => setIsSheetsModalOpen(false)}
+        initialTab="shifts"
+      />
+
+      {/* Gmail Compose Modal for Technician Call Sheets */}
+      <GmailComposeModal
+        isOpen={isGmailModalOpen}
+        onClose={() => setIsGmailModalOpen(false)}
+        prefill={gmailPrefill}
+      />
+
+      {/* Google Contacts Import / Sync Modal */}
+      <GoogleContactsModal
+        isOpen={isContactsModalOpen}
+        onClose={() => setIsContactsModalOpen(false)}
+        defaultMode="import"
       />
     </div>
   );

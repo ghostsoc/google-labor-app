@@ -55,6 +55,7 @@ export function detectLaborShiftConflicts(shifts: LaborShift[]): ShiftConflict[]
 
   for (const shift of shifts) {
     if (!shift.staffId && !shift.staffName) continue;
+    // Key by staff identifier + date
     const techKey = `${shift.staffId || shift.staffName}:::${shift.date}`;
     if (!shiftsByStaffAndDate.has(techKey)) {
       shiftsByStaffAndDate.set(techKey, []);
@@ -66,11 +67,13 @@ export function detectLaborShiftConflicts(shifts: LaborShift[]): ShiftConflict[]
   for (const [, dayShifts] of shiftsByStaffAndDate.entries()) {
     if (dayShifts.length < 2) continue;
 
+    // Check every pair
     for (let i = 0; i < dayShifts.length; i++) {
       for (let j = i + 1; j < dayShifts.length; j++) {
         const shiftA = dayShifts[i];
         const shiftB = dayShifts[j];
 
+        // Ensure pair uniqueness
         const pairKey = [shiftA.id, shiftB.id].sort().join('___');
         if (processedPairs.has(pairKey)) continue;
         processedPairs.add(pairKey);
@@ -80,9 +83,11 @@ export function detectLaborShiftConflicts(shifts: LaborShift[]): ShiftConflict[]
         const startB = timeStringToMinutes(shiftB.startTime);
         const endB = timeStringToMinutes(shiftB.endTime);
 
+        // Normalize overnight shifts if end < start
         const normEndA = endA < startA ? endA + 1440 : endA;
         const normEndB = endB < startB ? endB + 1440 : endB;
 
+        // Check for direct overlap: max(startA, startB) < min(normEndA, normEndB)
         const overlapStart = Math.max(startA, startB);
         const overlapEnd = Math.min(normEndA, normEndB);
         const overlapDuration = overlapEnd - overlapStart;
@@ -103,15 +108,17 @@ export function detectLaborShiftConflicts(shifts: LaborShift[]): ShiftConflict[]
             description: `${shiftA.staffName} is simultaneously scheduled for "${shiftA.eventName}" (${shiftA.startTime}–${shiftA.endTime}) and "${shiftB.eventName}" (${shiftB.startTime}–${shiftB.endTime}) with an active overlap of ${formatMinutes(overlapDuration)}.`,
             recommendation: `Reassign one shift to another available crew technician or adjust call time windows to eliminate overlap.`,
           });
-          continue;
+          continue; // Prioritize direct overlap over transit warning
         }
 
+        // If not directly overlapping, check if different venues with < 45 min transit gap
         const venuesAreDifferent =
           shiftA.venue &&
           shiftB.venue &&
           shiftA.venue.trim().toLowerCase() !== shiftB.venue.trim().toLowerCase();
 
         if (venuesAreDifferent) {
+          // Gap between end of earlier shift and start of later shift
           let gap = 0;
           if (normEndA <= startB) {
             gap = startB - normEndA;
@@ -140,6 +147,7 @@ export function detectLaborShiftConflicts(shifts: LaborShift[]): ShiftConflict[]
       }
     }
 
+    // Check total hours on this single date
     const totalHours = dayShifts.reduce((sum, s) => sum + (s.hours || 0), 0);
     if (totalHours > 14) {
       const firstShift = dayShifts[0];
@@ -169,6 +177,10 @@ export function detectLaborShiftConflicts(shifts: LaborShift[]): ShiftConflict[]
   return conflicts;
 }
 
+/**
+ * Checks if a specific proposed shift conflicts with any existing shifts.
+ * Useful for real-time validation in the Dispatch Modal.
+ */
 export function checkProposedShiftConflict(
   proposed: {
     staffId: string;

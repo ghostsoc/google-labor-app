@@ -18,9 +18,10 @@ import {
   ShieldCheck,
   CheckCircle2,
   Calendar,
-  Building,
   Download,
 } from 'lucide-react';
+import { GoogleContactsModal } from './GoogleContactsModal';
+import { GmailComposeModal, GmailComposePrefill } from './GmailComposeModal';
 
 interface ClientsManagerProps {
   onOpenQuoteWithClient?: (client: Client) => void;
@@ -45,6 +46,12 @@ export const ClientsManager: React.FC<ClientsManagerProps> = ({ onOpenQuoteWithC
   const [selectedTerms, setSelectedTerms] = useState<string>('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+
+  // Google Workspace modals state
+  const [isContactsModalOpen, setIsContactsModalOpen] = useState(false);
+  const [contactsMode, setContactsMode] = useState<'import' | 'export'>('import');
+  const [isGmailModalOpen, setIsGmailModalOpen] = useState(false);
+  const [gmailPrefill, setGmailPrefill] = useState<GmailComposePrefill | null>(null);
 
   // Form State
   const [formData, setFormData] = useState<Omit<Client, 'id' | 'createdAt'>>({
@@ -186,12 +193,26 @@ export const ClientsManager: React.FC<ClientsManagerProps> = ({ onOpenQuoteWithC
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <button
+            onClick={() => {
+              setContactsMode('import');
+              setIsContactsModalOpen(true);
+            }}
+            title="Import or Sync Contacts from Google People API"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-300 bg-neutral-800 hover:bg-neutral-700 hover:text-blue-300 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
+          >
+            <Contact className="w-3.5 h-3.5 text-blue-400" />
+            <span>Google Contacts</span>
+          </button>
+          <button
             onClick={handleExportClientsCSV}
-            title="Download CSV report of client accounts"
+            title={`Download CSV report of ${filteredClients.length} client accounts`}
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-300 bg-neutral-800 hover:bg-neutral-700 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-amber-400" />
             <span>Export CSV</span>
+            <span className="text-[10px] bg-neutral-900 text-neutral-400 px-1.5 py-0.5 rounded border border-neutral-700/60 font-mono">
+              {filteredClients.length}
+            </span>
           </button>
           <button
             onClick={handleOpenAdd}
@@ -269,6 +290,31 @@ export const ClientsManager: React.FC<ClientsManagerProps> = ({ onOpenQuoteWithC
                   </div>
 
                   <div className="flex items-center gap-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setGmailPrefill({
+                          to: client.email,
+                          subject: `In The Wind AV - Production Services for ${client.name}`,
+                        });
+                        setIsGmailModalOpen(true);
+                      }}
+                      title="Send Email with Gmail"
+                      className="p-1.5 text-neutral-400 hover:text-red-400 hover:bg-neutral-800 rounded transition-colors"
+                    >
+                      <Mail className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setContactsMode('export');
+                        setIsContactsModalOpen(true);
+                      }}
+                      title="Sync with Google Contacts"
+                      className="p-1.5 text-neutral-400 hover:text-blue-400 hover:bg-neutral-800 rounded transition-colors"
+                    >
+                      <Contact className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       onClick={(e) => handleOpenEdit(client, e)}
                       title="Edit Client"
@@ -685,6 +731,20 @@ export const ClientsManager: React.FC<ClientsManagerProps> = ({ onOpenQuoteWithC
           </div>
         </div>
       )}
+
+      {/* Google Contacts Import / Export Modal */}
+      <GoogleContactsModal
+        isOpen={isContactsModalOpen}
+        onClose={() => setIsContactsModalOpen(false)}
+        defaultMode={contactsMode}
+      />
+
+      {/* Gmail Compose Modal for Direct Client Email */}
+      <GmailComposeModal
+        isOpen={isGmailModalOpen}
+        onClose={() => setIsGmailModalOpen(false)}
+        prefill={gmailPrefill}
+      />
     </div>
   );
 };

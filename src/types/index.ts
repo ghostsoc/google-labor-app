@@ -324,6 +324,7 @@ export type ActiveTab =
   | 'invoices'
   | 'clients'
   | 'pullsheet'
+  | 'team'
   | 'settings';
 
 export * from './roles';

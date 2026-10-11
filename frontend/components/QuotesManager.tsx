@@ -33,8 +33,12 @@ import {
   Sparkles,
   Maximize2,
   Eye,
+  FileSpreadsheet,
+  Mail,
 } from 'lucide-react';
 import { EventDetailModal } from './EventDetailModal';
+import { GoogleSheetsModal } from './GoogleSheetsModal';
+import { GmailComposeModal, GmailComposePrefill } from './GmailComposeModal';
 
 interface QuotesManagerProps {
   isCreateModalOpen: boolean;
@@ -68,6 +72,12 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [selectedQuoteForDetail, setSelectedQuoteForDetail] = useState<ClientQuote | null>(null);
+
+  // Google Workspace direct action state
+  const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
+  const [sheetsPreselectedQuoteId, setSheetsPreselectedQuoteId] = useState<string | undefined>(undefined);
+  const [isGmailModalOpen, setIsGmailModalOpen] = useState(false);
+  const [gmailPrefill, setGmailPrefill] = useState<GmailComposePrefill | null>(null);
 
   // Interactive Quote Builder State
   const [builderEventName, setBuilderEventName] = useState('Apex Technology Showcase 2026');
@@ -330,21 +340,34 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            // Seed a starter quote with Kara and Shure mics if blank
-            if (builderEquipment.length === 0 && inventory.length > 0) {
-              handleAddEquipmentLine(inventory[0]);
-              if (inventory[1]) handleAddEquipmentLine(inventory[1]);
-              handleAddLaborLine();
-            }
-            setIsCreateModalOpen(true);
-          }}
-          className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-sm self-start sm:self-auto cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Create New Quote</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => {
+              setSheetsPreselectedQuoteId(undefined);
+              setIsSheetsModalOpen(true);
+            }}
+            title="Export Proposals to Google Sheets"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-300 bg-neutral-800 hover:bg-neutral-700 hover:text-emerald-300 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Sync Sheets</span>
+          </button>
+          <button
+            onClick={() => {
+              // Seed a starter quote with Kara and Shure mics if blank
+              if (builderEquipment.length === 0 && inventory.length > 0) {
+                handleAddEquipmentLine(inventory[0]);
+                if (inventory[1]) handleAddEquipmentLine(inventory[1]);
+                handleAddLaborLine();
+              }
+              setIsCreateModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-neutral-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-sm cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create New Quote</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -499,6 +522,34 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
                           className="p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded transition-colors cursor-pointer"
                         >
                           <Printer className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Export Quote to Google Sheets */}
+                        <button
+                          onClick={() => {
+                            setSheetsPreselectedQuoteId(quote.id);
+                            setIsSheetsModalOpen(true);
+                          }}
+                          title="Export Quote to Google Sheets"
+                          className="p-1.5 text-neutral-400 hover:text-emerald-400 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                        >
+                          <FileSpreadsheet className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Email Proposal via Gmail */}
+                        <button
+                          onClick={() => {
+                            setGmailPrefill({
+                              templateType: 'quote',
+                              quoteId: quote.id,
+                              to: quote.clientEmail,
+                            });
+                            setIsGmailModalOpen(true);
+                          }}
+                          title="Email Proposal to Client via Gmail"
+                          className="p-1.5 text-neutral-400 hover:text-red-400 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                        >
+                          <Mail className="w-3.5 h-3.5" />
                         </button>
 
                         {/* Convert to Active Job (reserves gear & books crew) */}
@@ -1215,6 +1266,21 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
           }}
         />
       )}
+
+      {/* Google Sheets Modal */}
+      <GoogleSheetsModal
+        isOpen={isSheetsModalOpen}
+        onClose={() => setIsSheetsModalOpen(false)}
+        initialTab="quotes"
+        preselectedQuoteId={sheetsPreselectedQuoteId}
+      />
+
+      {/* Gmail Compose Modal */}
+      <GmailComposeModal
+        isOpen={isGmailModalOpen}
+        onClose={() => setIsGmailModalOpen(false)}
+        prefill={gmailPrefill}
+      />
     </div>
   );
 };

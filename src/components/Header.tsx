@@ -3,6 +3,10 @@ import { useApp } from '../context/AppContext';
 import { ActiveTab } from '../types';
 import { AuthModal } from './AuthModal';
 import { GoogleCalendarSyncModal } from './GoogleCalendarSyncModal';
+import { GoogleWorkspaceHubModal } from './GoogleWorkspaceHubModal';
+import { GoogleSheetsModal } from './GoogleSheetsModal';
+import { GmailComposeModal } from './GmailComposeModal';
+import { GoogleContactsModal } from './GoogleContactsModal';
 import { UserRolesModal } from './UserRolesModal';
 import { USER_ROLE_DEFINITIONS, UserRole } from '../types/roles';
 import {
@@ -24,6 +28,8 @@ import {
   Sparkles,
   KeyRound,
   Cloud,
+  FileSpreadsheet,
+  Mail,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -47,11 +53,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewQuote, onOpenSettings }
     setSimulatedRole,
     googleCalendarToken,
     userHasPermission,
+    teamUsers,
   } = useApp();
 
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [isWorkspaceHubOpen, setIsWorkspaceHubOpen] = useState(false);
+  const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
+  const [isGmailModalOpen, setIsGmailModalOpen] = useState(false);
+  const [isContactsModalOpen, setIsContactsModalOpen] = useState(false);
   const [isRolesModalOpen, setIsRolesModalOpen] = useState(false);
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
 
@@ -103,6 +114,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewQuote, onOpenSettings }
     { id: 'invoices', label: 'Invoices', icon: <DollarSign className="w-4 h-4" />, badge: overdueInvoicesCount },
     { id: 'clients', label: 'Clients CRM', icon: <Contact className="w-4 h-4" /> },
     { id: 'pullsheet', label: 'Pull Sheet', icon: <ClipboardCheck className="w-4 h-4" /> },
+    { id: 'team', label: 'Team Accounts', icon: <Shield className="w-4 h-4" />, badge: teamUsers.length },
   ];
 
   return (
@@ -151,23 +163,53 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewQuote, onOpenSettings }
 
           {/* Zone 3: Actions, Google Calendar & Role RBAC Controls */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Google Calendar Sync Button */}
+            {/* Google Workspace Hub Button (Sheets, Gmail, Contacts, Calendar) */}
             <button
-              onClick={() => setIsCalendarModalOpen(true)}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-all cursor-pointer shadow-xs ${
+              onClick={() => setIsWorkspaceHubOpen(true)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer shadow-xs ${
                 googleCalendarToken
-                  ? 'bg-blue-500/10 text-blue-300 border-blue-500/30 hover:bg-blue-500/20'
+                  ? 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20'
                   : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700'
               }`}
-              title="Google Calendar Integration: Sync events & crew calls"
+              title="Google Workspace Hub: Google Sheets, Gmail, Contacts, and Calendar"
             >
-              <Calendar className={`w-3.5 h-3.5 ${googleCalendarToken ? 'text-blue-400' : 'text-neutral-400'}`} />
-              <span className="hidden xl:inline">Google Calendar</span>
+              <Sparkles className={`w-3.5 h-3.5 ${googleCalendarToken ? 'text-amber-400' : 'text-neutral-400'}`} />
+              <span className="hidden md:inline">Google Workspace</span>
               {googleCalendarToken ? (
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               ) : (
-                <span className="hidden sm:inline text-[10px] font-mono text-neutral-400">Sync</span>
+                <span className="hidden sm:inline text-[10px] font-mono text-neutral-400">Connect</span>
               )}
+            </button>
+
+            {/* Quick Sheets Direct Button */}
+            <button
+              onClick={() => setIsSheetsModalOpen(true)}
+              className="hidden lg:flex items-center gap-1 px-2 py-1.5 text-xs text-neutral-300 hover:text-emerald-300 hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer"
+              title="Google Sheets: Export & Sync Spreadsheets"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Sheets</span>
+            </button>
+
+            {/* Quick Gmail Direct Button */}
+            <button
+              onClick={() => setIsGmailModalOpen(true)}
+              className="hidden lg:flex items-center gap-1 px-2 py-1.5 text-xs text-neutral-300 hover:text-red-300 hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer"
+              title="Gmail: Dispatch Quotes, Invoices & Crew Calls"
+            >
+              <Mail className="w-3.5 h-3.5 text-red-400" />
+              <span>Gmail</span>
+            </button>
+
+            {/* Quick Contacts Direct Button */}
+            <button
+              onClick={() => setIsContactsModalOpen(true)}
+              className="hidden lg:flex items-center gap-1 px-2 py-1.5 text-xs text-neutral-300 hover:text-blue-300 hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer"
+              title="Google Contacts: People API Address Book"
+            >
+              <Contact className="w-3.5 h-3.5 text-blue-400" />
+              <span>Contacts</span>
             </button>
 
             {/* Role Badge & RBAC Simulator Dropdown */}
@@ -390,6 +432,22 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewQuote, onOpenSettings }
       <GoogleCalendarSyncModal
         isOpen={isCalendarModalOpen}
         onClose={() => setIsCalendarModalOpen(false)}
+      />
+      <GoogleWorkspaceHubModal
+        isOpen={isWorkspaceHubOpen}
+        onClose={() => setIsWorkspaceHubOpen(false)}
+      />
+      <GoogleSheetsModal
+        isOpen={isSheetsModalOpen}
+        onClose={() => setIsSheetsModalOpen(false)}
+      />
+      <GmailComposeModal
+        isOpen={isGmailModalOpen}
+        onClose={() => setIsGmailModalOpen(false)}
+      />
+      <GoogleContactsModal
+        isOpen={isContactsModalOpen}
+        onClose={() => setIsContactsModalOpen(false)}
       />
       <UserRolesModal isOpen={isRolesModalOpen} onClose={() => setIsRolesModalOpen(false)} />
     </header>

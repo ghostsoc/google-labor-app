@@ -33,27 +33,33 @@ export const StaffShiftTimelineView: React.FC<StaffShiftTimelineViewProps> = ({
   onOpenConflictModal,
   onOpenGearModal,
 }) => {
+  // Timeline hours from 06:00 (6 AM) to 24:00 (Midnight)
   const startHour = 6;
   const endHour = 24;
   const totalHours = endHour - startHour;
 
+  // Available unique dates that have shifts
   const shiftDates = useMemo(() => {
     const dates = Array.from(new Set(shifts.map((s) => s.date))).sort();
     return dates.length > 0 ? dates : [selectedDate];
   }, [shifts, selectedDate]);
 
+  // Filter shifts on selected date
   const dayShifts = useMemo(() => {
     return shifts.filter((s) => s.date === selectedDate);
   }, [shifts, selectedDate]);
 
+  // Identify staff members who have shifts on this date or are available
   const scheduledStaffIds = useMemo(() => {
     return new Set(dayShifts.map((s) => s.staffId));
   }, [dayShifts]);
 
+  // Map conflicts affecting this specific date
   const dayConflicts = useMemo(() => {
     return conflicts.filter((c) => c.date === selectedDate);
   }, [conflicts, selectedDate]);
 
+  // Set of shift IDs involved in conflicts on this date
   const conflictingShiftIds = useMemo(() => {
     const set = new Set<string>();
     dayConflicts.forEach((c) => {
@@ -77,6 +83,7 @@ export const StaffShiftTimelineView: React.FC<StaffShiftTimelineViewProps> = ({
     }
   };
 
+  // Staff members to show: prioritized by those scheduled, then rest of roster
   const displayStaff = useMemo(() => {
     const active = staff.filter((s) => scheduledStaffIds.has(s.id));
     const others = staff.filter((s) => !scheduledStaffIds.has(s.id));
@@ -189,6 +196,7 @@ export const StaffShiftTimelineView: React.FC<StaffShiftTimelineViewProps> = ({
                     hasConflict ? 'bg-rose-950/20 border-l-2 border-rose-500 pl-1' : ''
                   }`}
                 >
+                  {/* Tech Profile Column */}
                   <div className="w-48 shrink-0 pr-3">
                     <div className="flex items-center gap-2">
                       <div
@@ -215,13 +223,16 @@ export const StaffShiftTimelineView: React.FC<StaffShiftTimelineViewProps> = ({
                     </div>
                   </div>
 
+                  {/* 18-Hour Timeline Bar Track */}
                   <div className="flex-1 h-10 bg-neutral-950/70 rounded-lg relative overflow-hidden border border-neutral-800/70">
+                    {/* Hour grid lines */}
                     <div className="absolute inset-0 grid grid-cols-18 pointer-events-none">
                       {Array.from({ length: totalHours }).map((_, i) => (
                         <div key={i} className="border-r border-neutral-800/40 h-full" />
                       ))}
                     </div>
 
+                    {/* Render member shifts as blocks */}
                     {memberShifts.map((shift) => {
                       const isConflicting = conflictingShiftIds.has(shift.id);
 
@@ -289,6 +300,7 @@ export const StaffShiftTimelineView: React.FC<StaffShiftTimelineViewProps> = ({
                       );
                     })}
 
+                    {/* Placeholder when not scheduled */}
                     {memberShifts.length === 0 && (
                       <div className="absolute inset-0 flex items-center justify-center text-[10px] text-neutral-600 font-mono">
                         Available / Off Call

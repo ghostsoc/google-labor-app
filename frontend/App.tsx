@@ -9,6 +9,7 @@ import { QuotesManager } from './components/QuotesManager';
 import { InvoicesManager } from './components/InvoicesManager';
 import { ClientsManager } from './components/ClientsManager';
 import { WarehousePullSheet } from './components/WarehousePullSheet';
+import { TeamManager } from './components/TeamManager';
 import { QuotePrintView } from './components/QuotePrintView';
 import { InvoicePrintView } from './components/InvoicePrintView';
 import { SettingsModal } from './components/SettingsModal';
@@ -141,6 +142,8 @@ const MainLayout: React.FC = () => {
             )}
 
             {activeTab === 'pullsheet' && <WarehousePullSheet />}
+
+            {activeTab === 'team' && <TeamManager />}
           </>
         )}
       </main>
