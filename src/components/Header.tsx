@@ -30,6 +30,7 @@ import {
   Cloud,
   FileSpreadsheet,
   Mail,
+  History,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -54,6 +55,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewQuote, onOpenSettings }
     googleCalendarToken,
     userHasPermission,
     teamUsers,
+    auditLogs,
   } = useApp();
 
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -115,6 +117,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewQuote, onOpenSettings }
     { id: 'clients', label: 'Clients CRM', icon: <Contact className="w-4 h-4" /> },
     { id: 'pullsheet', label: 'Pull Sheet', icon: <ClipboardCheck className="w-4 h-4" /> },
     { id: 'team', label: 'Team Accounts', icon: <Shield className="w-4 h-4" />, badge: teamUsers.length },
+    ...(userHasPermission('canAccessAuditLogs')
+      ? [{ id: 'audit' as ActiveTab, label: 'Audit Log', icon: <History className="w-4 h-4" />, badge: auditLogs.length }]
+      : []),
   ];
 
   return (

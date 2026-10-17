@@ -172,6 +172,23 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Audit Logs Collection (Append-only accountability trail)
+    match /audit_logs/{logId} {
+      function isValidAuditLog(data) {
+        return data.id is string && data.id.size() <= 128
+          && data.timestamp is string && data.timestamp.size() <= 64
+          && data.entityType is string && data.entityType.size() <= 32
+          && data.entityId is string && data.entityId.size() <= 128
+          && data.action is string && data.action.size() <= 64
+          && data.summary is string && data.summary.size() <= 2048;
+      }
+
+      allow get, list: if true;
+      allow create: if isValidId(logId) && isValidAuditLog(incoming());
+      allow update: if false; // Immutable audit log trail
+      allow delete: if isValidId(logId);
+    }
+
     // Connection Health Check document
     match /test/{testId} {
       allow read: if true;

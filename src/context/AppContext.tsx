@@ -48,10 +48,16 @@ import {
   UserRole,
   RolePermissions,
   USER_ROLE_DEFINITIONS,
+  AuditLogEntry,
+  AuditLogActor,
 } from '../types';
 import {
   initialCompanySettings,
 } from '../data/mockData';
+import {
+  initialAuditLogs,
+  computeEntityDiff,
+} from '../utils/auditLogger';
 
 interface AppContextType {
   activeTab: ActiveTab;
@@ -147,6 +153,11 @@ interface AppContextType {
   setActiveInvoiceForPrint: (invoice: Invoice | null) => void;
   selectedQuoteForPull: ClientQuote | null;
   setSelectedQuoteForPull: (quote: ClientQuote | null) => void;
+
+  // Lightweight Audit Logging
+  auditLogs: AuditLogEntry[];
+  recordAuditLog: (entry: Omit<AuditLogEntry, 'id' | 'timestamp' | 'actor'> & { actor?: AuditLogActor }) => Promise<void>;
+  clearAuditLogs: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -322,6 +333,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [settings, setSettings] = useState<CompanySettings>(() => {
     const saved = localStorage.getItem(`${STORAGE_PREFIX}settings`);
     return saved ? JSON.parse(saved) : initialCompanySettings;
+  });
+
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}audit_logs`);
+    return saved ? JSON.parse(saved) : initialAuditLogs;
   });
 
   const [activeQuoteForPrint, setActiveQuoteForPrint] = useState<ClientQuote | null>(null);
@@ -534,6 +550,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
     unsubscribers.push(usersUnsub);
 
+    // 10. Audit Logs Live Listener
+    const auditUnsub = onSnapshot(
+      collection(db, 'audit_logs'),
+      (snap) => {
+        const loaded: AuditLogEntry[] = [];
+        snap.forEach((d) => loaded.push(d.data() as AuditLogEntry));
+        if (loaded.length > 0) {
+          // Sort newest first
+          loaded.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+          setAuditLogs(loaded);
+          localStorage.setItem(`${STORAGE_PREFIX}audit_logs`, JSON.stringify(loaded));
+        }
+      },
+      (error) => {
+        console.warn('Audit logs live listener (offline fallback):', error);
+      }
+    );
+    unsubscribers.push(auditUnsub);
+
     return () => {
       unsubscribers.forEach((fn) => fn());
     };
@@ -571,6 +606,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem(`${STORAGE_PREFIX}settings`, JSON.stringify(settings));
   }, [settings]);
+
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_PREFIX}audit_logs`, JSON.stringify(auditLogs));
+  }, [auditLogs]);
 
   // Google Sign-in with Popup
   const signInWithGoogle = async () => {
@@ -651,8 +690,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Cloud Storage File Upload
+  // Cloud Storage File Upload
   const uploadFile = async (path: string, file: File | Blob): Promise<string> => {
     return await uploadFileToStorage(path, file);
+  };
+
+  // --------------------------------------------------------------------------
+  // Audit Logging actions & helper
+  // --------------------------------------------------------------------------
+  const getEffectiveActor = (): AuditLogActor => ({
+    uid: currentUser?.uid || 'user-admin',
+    name: currentUser?.displayName || (currentUser?.email ? currentUser.email.split('@')[0] : 'Chris Vance'),
+    email: currentUser?.email || 'chris@inthewindav.com',
+    role: activeRole,
+  });
+
+  const recordAuditLog = async (
+    entry: Omit<AuditLogEntry, 'id' | 'timestamp' | 'actor'> & { actor?: AuditLogActor }
+  ) => {
+    const id = `audit-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+    const fullEntry: AuditLogEntry = {
+      id,
+      timestamp: new Date().toISOString(),
+      actor: entry.actor || getEffectiveActor(),
+      ...entry,
+    };
+
+    setAuditLogs((prev) => [fullEntry, ...prev]);
+
+    try {
+      await setDoc(doc(db, 'audit_logs', id), cleanForFirestore(fullEntry));
+    } catch (err) {
+      console.warn('Firestore record audit log (offline fallback):', err);
+    }
+  };
+
+  const clearAuditLogs = async () => {
+    setAuditLogs([]);
+    localStorage.removeItem(`${STORAGE_PREFIX}audit_logs`);
   };
 
   // --------------------------------------------------------------------------
@@ -663,6 +738,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newItem: InventoryItem = { ...item, id };
     setInventory((prev) => [newItem, ...prev]);
 
+    recordAuditLog({
+      entityType: 'inventory',
+      entityId: id,
+      entityName: `${newItem.name} [SKU: ${newItem.sku}]`,
+      action: 'create',
+      summary: `Created inventory asset "${newItem.name}" (${newItem.category}) with initial count of ${newItem.totalQuantity}`,
+      changes: [
+        { field: 'sku', fieldLabel: 'Item SKU', oldValue: 'None', newValue: newItem.sku },
+        { field: 'totalQuantity', fieldLabel: 'Total Fleet Count', oldValue: 0, newValue: newItem.totalQuantity },
+        { field: 'dayRate', fieldLabel: 'Standard Day Rate ($)', oldValue: 0, newValue: `$${newItem.dayRate}` },
+        { field: 'locationBin', fieldLabel: 'Warehouse Location Bin', oldValue: 'None', newValue: newItem.locationBin || 'Unassigned' },
+      ],
+    });
+
     try {
       await setDoc(doc(db, 'inventory', id), cleanForFirestore(newItem));
     } catch (error) {
@@ -671,9 +760,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateInventoryItem = async (id: string, updates: Partial<InventoryItem>) => {
+    const target = inventory.find((i) => i.id === id);
+    const diffs = target ? computeEntityDiff(target, updates) : [];
+
     setInventory((prev) =>
       prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
     );
+
+    if (target && diffs.length > 0) {
+      recordAuditLog({
+        entityType: 'inventory',
+        entityId: id,
+        entityName: `${target.name} [SKU: ${target.sku}]`,
+        action: updates.status && updates.status !== target.status ? 'status_change' : 'update',
+        summary: `Updated inventory asset "${target.name}": changed ${diffs.map((d) => d.fieldLabel).join(', ')}`,
+        changes: diffs,
+      });
+    }
 
     try {
       await updateDoc(doc(db, 'inventory', id), cleanForFirestore(updates));
@@ -683,7 +786,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteInventoryItem = async (id: string) => {
+    const target = inventory.find((item) => item.id === id);
     setInventory((prev) => prev.filter((item) => item.id !== id));
+
+    if (target) {
+      recordAuditLog({
+        entityType: 'inventory',
+        entityId: id,
+        entityName: `${target.name} [SKU: ${target.sku}]`,
+        action: 'delete',
+        summary: `Deleted inventory asset "${target.name}" [SKU: ${target.sku}] from fleet catalog`,
+      });
+    }
 
     try {
       await deleteDoc(doc(db, 'inventory', id));
@@ -714,6 +828,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       inRepairQuantity: newRepairQty,
       availableQuantity: newAvail,
     };
+
+    recordAuditLog({
+      entityType: 'inventory',
+      entityId: id,
+      entityName: `${target.name} [SKU: ${target.sku}]`,
+      action: 'maintenance',
+      summary: `Transferred asset to maintenance status "${status}" (${newRepairQty} unit(s) in shop)`,
+      changes: [
+        { field: 'status', fieldLabel: 'Status', oldValue: target.status, newValue: status },
+        { field: 'inRepairQuantity', fieldLabel: 'In Repair / Shop', oldValue: target.inRepairQuantity, newValue: newRepairQty },
+        { field: 'availableQuantity', fieldLabel: 'Available in Warehouse', oldValue: target.availableQuantity, newValue: newAvail },
+      ],
+    });
 
     await updateInventoryItem(id, updates);
   };
@@ -760,6 +887,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newShift: LaborShift = { ...shift, id };
     setShifts((prev) => [newShift, ...prev]);
 
+    recordAuditLog({
+      entityType: 'schedule',
+      entityId: id,
+      entityName: `${newShift.eventName}: ${newShift.staffName} (${newShift.role})`,
+      action: 'create',
+      summary: `Dispatched crew shift call for ${newShift.staffName} as ${newShift.role} on "${newShift.eventName}" (${newShift.date} ${newShift.startTime}-${newShift.endTime})`,
+      changes: [
+        { field: 'staffName', fieldLabel: 'Assigned Crew Member', oldValue: 'Unassigned', newValue: newShift.staffName },
+        { field: 'role', fieldLabel: 'Production Crew Role', oldValue: 'None', newValue: newShift.role },
+        { field: 'date', fieldLabel: 'Call Date', oldValue: 'None', newValue: newShift.date },
+        { field: 'startTime', fieldLabel: 'Call Time (Start)', oldValue: 'None', newValue: newShift.startTime },
+        { field: 'endTime', fieldLabel: 'Wrap Time (End)', oldValue: 'None', newValue: newShift.endTime },
+        { field: 'rate', fieldLabel: 'Labor Pay Rate ($)', oldValue: '$0', newValue: `$${newShift.rate}/${newShift.rateType === 'Hourly' ? 'hr' : 'day'}` },
+      ],
+    });
+
     try {
       await setDoc(doc(db, 'shifts', id), cleanForFirestore(newShift));
     } catch (error) {
@@ -768,9 +911,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateShift = async (id: string, updates: Partial<LaborShift>) => {
+    const target = shifts.find((s) => s.id === id);
+    const diffs = target ? computeEntityDiff(target, updates) : [];
+
     setShifts((prev) =>
       prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
     );
+
+    if (target && diffs.length > 0) {
+      recordAuditLog({
+        entityType: 'schedule',
+        entityId: id,
+        entityName: `${target.eventName}: ${target.staffName} (${target.role})`,
+        action: updates.status && updates.status !== target.status ? 'status_change' : 'update',
+        summary: `Updated shift schedule for ${target.staffName}: changed ${diffs.map((d) => d.fieldLabel).join(', ')}`,
+        changes: diffs,
+      });
+    }
 
     try {
       await updateDoc(doc(db, 'shifts', id), cleanForFirestore(updates));
@@ -780,7 +937,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteShift = async (id: string) => {
+    const target = shifts.find((item) => item.id === id);
     setShifts((prev) => prev.filter((item) => item.id !== id));
+
+    if (target) {
+      recordAuditLog({
+        entityType: 'schedule',
+        entityId: id,
+        entityName: `${target.eventName}: ${target.staffName} (${target.role})`,
+        action: 'delete',
+        summary: `Cancelled / deleted shift call for ${target.staffName} (${target.role}) on "${target.eventName}" (${target.date})`,
+      });
+    }
 
     try {
       await deleteDoc(doc(db, 'shifts', id));
@@ -803,6 +971,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setQuotes((prev) => [newQuote, ...prev]);
 
+    recordAuditLog({
+      entityType: 'quote',
+      entityId: id,
+      entityName: `${quoteNumber} (${newQuote.eventName})`,
+      action: 'create',
+      summary: `Created quote proposal ${quoteNumber} for "${newQuote.eventName}" (${newQuote.clientCompany || newQuote.clientName}) - Value: $${newQuote.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+      changes: [
+        { field: 'totalAmount', fieldLabel: 'Total Amount ($)', oldValue: '$0.00', newValue: `$${newQuote.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` },
+        { field: 'status', fieldLabel: 'Status', oldValue: 'None', newValue: newQuote.status },
+        { field: 'venueName', fieldLabel: 'Venue Name', oldValue: 'None', newValue: newQuote.venueName },
+        { field: 'showStartDate', fieldLabel: 'Show Start Date', oldValue: 'None', newValue: newQuote.showStartDate },
+        { field: 'equipmentItems', fieldLabel: 'Equipment Items Manifest', oldValue: '0 items', newValue: `${newQuote.equipmentItems.length} items` },
+        { field: 'laborItems', fieldLabel: 'Crew Labor Call List', oldValue: '0 shifts', newValue: `${newQuote.laborItems.length} shifts` },
+      ],
+    });
+
     try {
       setDoc(doc(db, 'quotes', id), cleanForFirestore(newQuote));
     } catch (error) {
@@ -813,9 +997,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateQuote = async (id: string, updates: Partial<ClientQuote>) => {
+    const target = quotes.find((q) => q.id === id);
+    const diffs = target ? computeEntityDiff(target, updates) : [];
+
     setQuotes((prev) =>
       prev.map((quote) => (quote.id === id ? { ...quote, ...updates } : quote))
     );
+
+    if (target && diffs.length > 0) {
+      recordAuditLog({
+        entityType: 'quote',
+        entityId: id,
+        entityName: `${target.quoteNumber} (${target.eventName})`,
+        action: updates.status && updates.status !== target.status ? 'status_change' : 'update',
+        summary: `Updated quote ${target.quoteNumber}: changed ${diffs.map((d) => d.fieldLabel).join(', ')}`,
+        changes: diffs,
+      });
+    }
 
     try {
       await updateDoc(doc(db, 'quotes', id), cleanForFirestore(updates));
@@ -825,7 +1023,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteQuote = async (id: string) => {
+    const target = quotes.find((item) => item.id === id);
     setQuotes((prev) => prev.filter((item) => item.id !== id));
+
+    if (target) {
+      recordAuditLog({
+        entityType: 'quote',
+        entityId: id,
+        entityName: `${target.quoteNumber} (${target.eventName})`,
+        action: 'delete',
+        summary: `Deleted quote proposal ${target.quoteNumber} ("${target.eventName}")`,
+      });
+    }
 
     try {
       await deleteDoc(doc(db, 'quotes', id));
@@ -841,6 +1050,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const convertQuoteToActiveJob = async (id: string) => {
     const quote = quotes.find((q) => q.id === id);
     if (!quote) return;
+
+    recordAuditLog({
+      entityType: 'quote',
+      entityId: id,
+      entityName: `${quote.quoteNumber} (${quote.eventName})`,
+      action: 'gear_hold',
+      summary: `Approved quote ${quote.quoteNumber} ("${quote.eventName}") and placed ${quote.equipmentItems.length} equipment manifest(s) on warehouse rental hold`,
+      changes: [
+        { field: 'status', fieldLabel: 'Status', oldValue: quote.status, newValue: 'Approved' },
+        { field: 'termsAccepted', fieldLabel: 'Terms & Conditions Accepted', oldValue: 'No', newValue: 'Yes' },
+      ],
+    });
 
     await updateQuote(id, { status: 'Approved', termsAccepted: true });
 
@@ -865,12 +1086,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ) => {
     const quote = quotes.find((q) => q.id === quoteId);
     if (!quote) return;
+    const inv = inventory.find((i) => i.id === inventoryId);
 
     const currentMap = quote.pulledGearStatus || {};
+    const previousCount = currentMap[inventoryId] || 0;
     const updatedStatus = {
       ...currentMap,
       [inventoryId]: count,
     };
+
+    recordAuditLog({
+      entityType: 'quote',
+      entityId: quoteId,
+      entityName: `${quote.quoteNumber} (${quote.eventName})`,
+      action: 'update',
+      summary: `Pull sheet fulfillment scan: updated ${inv?.name || inventoryId} count from ${previousCount} to ${count}`,
+      changes: [
+        { field: 'pulledGearStatus', fieldLabel: `${inv?.name || 'Gear Item'} Staged Count`, oldValue: previousCount, newValue: count },
+      ],
+    });
 
     await updateQuote(quoteId, { pulledGearStatus: updatedStatus });
   };
@@ -1168,6 +1402,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.removeItem(`${STORAGE_PREFIX}clients`);
     localStorage.removeItem(`${STORAGE_PREFIX}maintenance`);
     localStorage.removeItem(`${STORAGE_PREFIX}settings`);
+    localStorage.removeItem(`${STORAGE_PREFIX}audit_logs`);
+    setAuditLogs(initialAuditLogs);
 
     // Reload live collections from Firestore database
     try {
@@ -1302,6 +1538,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveInvoiceForPrint,
         selectedQuoteForPull,
         setSelectedQuoteForPull,
+
+        // Audit Logging
+        auditLogs,
+        recordAuditLog,
+        clearAuditLogs,
       }}
     >
       {children}

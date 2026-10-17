@@ -26,8 +26,10 @@ import {
   Printer,
   ArrowRight,
   FileSpreadsheet,
+  History,
 } from 'lucide-react';
 import { GoogleSheetsModal } from './GoogleSheetsModal';
+import { EntityAuditHistoryModal } from './EntityAuditHistoryModal';
 
 export const InventoryManager: React.FC = () => {
   const {
@@ -58,6 +60,7 @@ export const InventoryManager: React.FC = () => {
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [maintenanceTargetItem, setMaintenanceTargetItem] = useState<InventoryItem | null>(null);
   const [repairCountInput, setRepairCountInput] = useState<number>(1);
+  const [auditModalItem, setAuditModalItem] = useState<InventoryItem | null>(null);
 
   // Form state for add/edit
   const [formData, setFormData] = useState<Partial<InventoryItem>>({
@@ -467,6 +470,15 @@ export const InventoryManager: React.FC = () => {
                           <QrCode className="w-3.5 h-3.5" />
                         </button>
 
+                        {/* Audit Trail & Changes */}
+                        <button
+                          onClick={() => setAuditModalItem(item)}
+                          title="View Inventory Audit Trail & Changes"
+                          className="p-1.5 text-neutral-400 hover:text-amber-400 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                        </button>
+
                         {/* Quick Check-in / Check-out Simulation */}
                         <button
                           onClick={() => {
@@ -870,6 +882,18 @@ export const InventoryManager: React.FC = () => {
         onClose={() => setIsSheetsModalOpen(false)}
         initialTab="inventory"
       />
+
+      {/* Audit History Modal */}
+      {auditModalItem && (
+        <EntityAuditHistoryModal
+          isOpen={!!auditModalItem}
+          onClose={() => setAuditModalItem(null)}
+          entityType="inventory"
+          entityId={auditModalItem.id}
+          entityTitle={`${auditModalItem.name} [SKU: ${auditModalItem.sku}]`}
+          subtitle={`${auditModalItem.category} · ${auditModalItem.locationBin}`}
+        />
+      )}
     </div>
   );
 };

@@ -325,9 +325,11 @@ export type ActiveTab =
   | 'clients'
   | 'pullsheet'
   | 'team'
+  | 'audit'
   | 'settings';
 
 export * from './roles';
+export * from './audit';
 
 export interface AppUser {
   uid: string;

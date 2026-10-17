@@ -17,6 +17,7 @@ import {
   Clock,
   ChevronRight,
   TrendingUp,
+  History,
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -32,6 +33,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewQuote, onOpenNewS
     invoices,
     maintenanceRecords,
     clients,
+    auditLogs,
     setActiveTab,
     setActiveQuoteForPrint,
     setSelectedQuoteForPull,
@@ -519,6 +521,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewQuote, onOpenNewS
             <p className="text-xs text-neutral-400">
               {clients.length} corporate and promoter accounts configured with custom terms and technical riders.
             </p>
+          </div>
+
+          {/* Accountability Audit Trail Glance */}
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-bold text-white">Recent Audit Activity</h3>
+              </div>
+              <button
+                onClick={() => setActiveTab('audit')}
+                className="text-xs text-amber-400 hover:underline cursor-pointer flex items-center gap-1 font-semibold"
+              >
+                <span>View Full Trail ({auditLogs.length})</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {auditLogs.slice(0, 3).map((log) => (
+                <div
+                  key={log.id}
+                  onClick={() => setActiveTab('audit')}
+                  className="p-2.5 bg-neutral-950/60 border border-neutral-800/80 rounded-lg text-xs space-y-1 hover:border-neutral-700 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center justify-between text-[10px] text-neutral-400 font-mono">
+                    <span className="capitalize text-amber-400/90 font-bold">{log.entityType}</span>
+                    <span>{log.actor.name} ({log.actor.role})</span>
+                  </div>
+                  <div className="text-xs text-neutral-200 line-clamp-1 font-medium">
+                    {log.summary}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

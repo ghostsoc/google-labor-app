@@ -224,6 +224,24 @@
         "notes": { "type": "string", "maxLength": 2048 }
       },
       "required": ["name", "role", "dayRate", "hourlyRate"]
+    },
+    "auditLog": {
+      "title": "Audit Log Entry",
+      "description": "Immutable operational change log tracking modifications to quotes, inventory, and schedules",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "entityType": { "type": "string", "enum": ["quote", "inventory", "schedule"] },
+        "entityId": { "type": "string", "maxLength": 128 },
+        "entityName": { "type": "string", "maxLength": 256 },
+        "action": { "type": "string", "maxLength": 64 },
+        "summary": { "type": "string", "maxLength": 2048 },
+        "changes": { "type": "array" },
+        "actor": { "type": "object" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["id", "timestamp", "entityType", "entityId", "action", "summary", "actor"]
     }
   },
   "firestore": {
@@ -262,6 +280,10 @@
     "/settings/{settingsId}": {
       "schema": "companySettings",
       "description": "Company operational configuration"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "auditLog",
+      "description": "Immutable operational accountability audit records"
     }
   }
 }

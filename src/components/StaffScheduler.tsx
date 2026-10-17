@@ -43,10 +43,12 @@ import {
   Package,
   FileSpreadsheet,
   Contact,
+  History,
 } from 'lucide-react';
 import { GoogleSheetsModal } from './GoogleSheetsModal';
 import { GmailComposeModal, GmailComposePrefill } from './GmailComposeModal';
 import { GoogleContactsModal } from './GoogleContactsModal';
+import { EntityAuditHistoryModal } from './EntityAuditHistoryModal';
 
 interface StaffSchedulerProps {
   initialPrefill?: {
@@ -98,6 +100,7 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
   const [callSheetEvent, setCallSheetEvent] = useState<string | null>(null);
   const [selectedShiftForGear, setSelectedShiftForGear] = useState<LaborShift | null>(null);
   const [selectedShiftForLaborDetail, setSelectedShiftForLaborDetail] = useState<ShiftLaborCostDetails | null>(null);
+  const [auditModalShift, setAuditModalShift] = useState<LaborShift | null>(null);
 
   // Keep selected shift synchronized with current state in shifts array
   const currentActiveShiftForGear = useMemo(() => {
@@ -847,6 +850,13 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
                             <Package className="w-3.5 h-3.5" />
                           </button>
                           <button
+                            onClick={() => setAuditModalShift(shift)}
+                            title="View Shift Audit Trail & Changes"
+                            className="p-1 text-neutral-400 hover:text-amber-400 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                          </button>
+                          <button
                             onClick={() => {
                               setGmailPrefill({
                                 templateType: 'shift',
@@ -1478,6 +1488,18 @@ export const StaffScheduler: React.FC<StaffSchedulerProps> = ({
         onClose={() => setIsContactsModalOpen(false)}
         defaultMode="import"
       />
+
+      {/* Audit History Modal */}
+      {auditModalShift && (
+        <EntityAuditHistoryModal
+          isOpen={!!auditModalShift}
+          onClose={() => setAuditModalShift(null)}
+          entityType="schedule"
+          entityId={auditModalShift.id}
+          entityTitle={`${auditModalShift.eventName}: ${auditModalShift.staffName}`}
+          subtitle={`${auditModalShift.role} · ${auditModalShift.date} (${auditModalShift.startTime}-${auditModalShift.endTime})`}
+        />
+      )}
     </div>
   );
 };

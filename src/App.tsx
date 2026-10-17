@@ -10,6 +10,7 @@ import { InvoicesManager } from './components/InvoicesManager';
 import { ClientsManager } from './components/ClientsManager';
 import { WarehousePullSheet } from './components/WarehousePullSheet';
 import { TeamManager } from './components/TeamManager';
+import { AuditLogViewer } from './components/AuditLogViewer';
 import { QuotePrintView } from './components/QuotePrintView';
 import { InvoicePrintView } from './components/InvoicePrintView';
 import { SettingsModal } from './components/SettingsModal';
@@ -41,7 +42,8 @@ const MainLayout: React.FC = () => {
     (activeTab === 'quotes' && !userHasPermission('canAccessQuotes')) ||
     (activeTab === 'clients' && !userHasPermission('canAccessClients')) ||
     (activeTab === 'pullsheet' && !userHasPermission('canAccessPullSheets')) ||
-    (activeTab === 'maintenance' && !userHasPermission('canAccessMaintenance'));
+    (activeTab === 'maintenance' && !userHasPermission('canAccessMaintenance')) ||
+    (activeTab === 'audit' && !userHasPermission('canAccessAuditLogs'));
 
   const handleOpenNewQuote = () => {
     setPreselectedClient(null);
@@ -144,6 +146,7 @@ const MainLayout: React.FC = () => {
             {activeTab === 'pullsheet' && <WarehousePullSheet />}
 
             {activeTab === 'team' && <TeamManager />}
+            {activeTab === 'audit' && <AuditLogViewer />}
           </>
         )}
       </main>

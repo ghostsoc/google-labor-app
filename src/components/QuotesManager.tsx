@@ -35,10 +35,12 @@ import {
   Eye,
   FileSpreadsheet,
   Mail,
+  History,
 } from 'lucide-react';
 import { EventDetailModal } from './EventDetailModal';
 import { GoogleSheetsModal } from './GoogleSheetsModal';
 import { GmailComposeModal, GmailComposePrefill } from './GmailComposeModal';
+import { EntityAuditHistoryModal } from './EntityAuditHistoryModal';
 
 interface QuotesManagerProps {
   isCreateModalOpen: boolean;
@@ -78,6 +80,7 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
   const [sheetsPreselectedQuoteId, setSheetsPreselectedQuoteId] = useState<string | undefined>(undefined);
   const [isGmailModalOpen, setIsGmailModalOpen] = useState(false);
   const [gmailPrefill, setGmailPrefill] = useState<GmailComposePrefill | null>(null);
+  const [auditModalQuote, setAuditModalQuote] = useState<ClientQuote | null>(null);
 
   // Interactive Quote Builder State
   const [builderEventName, setBuilderEventName] = useState('Apex Technology Showcase 2026');
@@ -500,6 +503,15 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
                           className="p-1.5 text-neutral-400 hover:text-amber-400 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Audit Trail & Change History */}
+                        <button
+                          onClick={() => setAuditModalQuote(quote)}
+                          title="View Quote Audit Trail & Change History"
+                          className="p-1.5 text-neutral-400 hover:text-amber-400 hover:bg-neutral-800 rounded transition-colors cursor-pointer"
+                        >
+                          <History className="w-3.5 h-3.5" />
                         </button>
 
                         {/* Meeting Diagram & Stage Layout */}
@@ -1281,6 +1293,18 @@ export const QuotesManager: React.FC<QuotesManagerProps> = ({
         onClose={() => setIsGmailModalOpen(false)}
         prefill={gmailPrefill}
       />
+
+      {/* Audit History Modal */}
+      {auditModalQuote && (
+        <EntityAuditHistoryModal
+          isOpen={!!auditModalQuote}
+          onClose={() => setAuditModalQuote(null)}
+          entityType="quote"
+          entityId={auditModalQuote.id}
+          entityTitle={auditModalQuote.quoteNumber}
+          subtitle={auditModalQuote.eventName}
+        />
+      )}
     </div>
   );
 };

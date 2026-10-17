@@ -21,9 +21,11 @@ import {
   AlertCircle,
   CheckCircle2,
   ExternalLink,
+  Download,
 } from 'lucide-react';
 import { UserRole, USER_ROLE_DEFINITIONS, RolePermissions } from '../types/roles';
 import { AppUser } from '../types';
+import { exportToCSV } from '../utils/csvExport';
 
 export const TeamManager: React.FC = () => {
   const {
@@ -181,6 +183,32 @@ export const TeamManager: React.FC = () => {
     showNotification(`Switched active user to ${user.displayName || user.email} (${user.role})`, 'info');
   };
 
+  const handleExportTeamCSV = () => {
+    const headers = [
+      'User ID',
+      'Display Name',
+      'Email Address',
+      'Operational Role',
+      'Department',
+      'Phone Number',
+      'Account Status',
+      'Created Date',
+    ];
+
+    const rows = filteredUsers.map((user) => [
+      user.uid,
+      user.displayName || '',
+      user.email || '',
+      user.role,
+      user.department || '',
+      user.phone || '',
+      user.status || 'Active',
+      user.createdAt || '',
+    ]);
+
+    exportToCSV(`team_roster_export_${new Date().toISOString().split('T')[0]}`, headers, rows);
+  };
+
   // Permissions Matrix Rows
   const permissionCategories: {
     category: string;
@@ -280,6 +308,19 @@ export const TeamManager: React.FC = () => {
               <span>Permissions Matrix</span>
             </button>
           </div>
+
+          {/* Export CSV Button */}
+          <button
+            onClick={handleExportTeamCSV}
+            title={`Download CSV report of ${filteredUsers.length} team accounts`}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-300 bg-neutral-800 hover:bg-neutral-700 rounded-lg border border-neutral-700 transition-colors cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 text-amber-400" />
+            <span>Export CSV</span>
+            <span className="text-[10px] bg-neutral-900 text-neutral-400 px-1.5 py-0.5 rounded border border-neutral-700/60 font-mono">
+              {filteredUsers.length}
+            </span>
+          </button>
 
           {/* Create User Button */}
           <button

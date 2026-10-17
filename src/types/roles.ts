@@ -35,6 +35,8 @@ export interface RolePermissions {
   canManagePullSheets: boolean;
   canManageCompanySettings: boolean;
   canManageUserRoles: boolean;
+  canAccessAuditLogs: boolean;
+  canExportAuditLogs: boolean;
 }
 
 export interface UserRoleDefinition {
@@ -93,6 +95,8 @@ export const USER_ROLE_DEFINITIONS: Record<UserRole, UserRoleDefinition> = {
       canManagePullSheets: true,
       canManageCompanySettings: true,
       canManageUserRoles: true,
+      canAccessAuditLogs: true,
+      canExportAuditLogs: true,
     },
   },
 
@@ -138,6 +142,8 @@ export const USER_ROLE_DEFINITIONS: Record<UserRole, UserRoleDefinition> = {
       canManagePullSheets: true,
       canManageCompanySettings: false,
       canManageUserRoles: false,
+      canAccessAuditLogs: true,
+      canExportAuditLogs: true,
     },
   },
 
@@ -183,6 +189,8 @@ export const USER_ROLE_DEFINITIONS: Record<UserRole, UserRoleDefinition> = {
       canManagePullSheets: true,
       canManageCompanySettings: false,
       canManageUserRoles: false,
+      canAccessAuditLogs: true,
+      canExportAuditLogs: true,
     },
   },
 
@@ -228,6 +236,8 @@ export const USER_ROLE_DEFINITIONS: Record<UserRole, UserRoleDefinition> = {
       canManagePullSheets: false,
       canManageCompanySettings: false,
       canManageUserRoles: false,
+      canAccessAuditLogs: true,
+      canExportAuditLogs: false,
     },
   },
 
@@ -273,6 +283,8 @@ export const USER_ROLE_DEFINITIONS: Record<UserRole, UserRoleDefinition> = {
       canManagePullSheets: false,
       canManageCompanySettings: false,
       canManageUserRoles: false,
+      canAccessAuditLogs: false,
+      canExportAuditLogs: false,
     },
   },
 
@@ -318,6 +330,8 @@ export const USER_ROLE_DEFINITIONS: Record<UserRole, UserRoleDefinition> = {
       canManagePullSheets: false,
       canManageCompanySettings: false,
       canManageUserRoles: false,
+      canAccessAuditLogs: true,
+      canExportAuditLogs: true,
     },
   },
 };

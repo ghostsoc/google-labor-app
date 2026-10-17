@@ -6,11 +6,17 @@
 export function exportToCSV(filename: string, headers: string[], rows: (string | number | boolean | undefined | null)[][]): void {
   const escapeCSVValue = (val: string | number | boolean | undefined | null): string => {
     if (val === undefined || val === null) {
-      return '""';
+      return '';
+    }
+    if (typeof val === 'number') {
+      return isNaN(val) ? '' : String(val);
+    }
+    if (typeof val === 'boolean') {
+      return val ? 'TRUE' : 'FALSE';
     }
     const str = String(val);
-    // If string contains comma, quote, or newline, escape double quotes and wrap in quotes
-    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    // If string contains comma, quote, semicolon, or newline, escape double quotes and wrap in quotes
+    if (str.includes(',') || str.includes('"') || str.includes(';') || str.includes('\n') || str.includes('\r')) {
       return `"${str.replace(/"/g, '""')}"`;
     }
     return `"${str}"`;
