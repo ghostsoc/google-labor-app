@@ -1,0 +1,29 @@
+services:
+  app:
+    image: oven/bun:1-alpine
+    working_dir: /app
+    # Dev mode: install deps from the current lockfile, then run the Vite/Express dev server
+    # from the bind-mounted source so edits show up without rebuilding an image.
+    command: ["sh", "-ec", "bun install --frozen-lockfile && exec bun run dev"]
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - base44_node_modules:/app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - BASE44_PREVIEW_MODE
+      - BASE44_PUBLIC_HOST_SUFFIX
+      - BASE44_SANDBOX_HOST_DOMAIN
+      - __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  base44_node_modules:
