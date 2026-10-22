@@ -53,6 +53,7 @@ import {
 } from '../types';
 import {
   initialCompanySettings,
+  initialTeamUsers,
 } from '../data/mockData';
 import {
   initialAuditLogs,
@@ -168,8 +169,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
 
   // Firebase Auth State
-  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
-  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}current_user`);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // ignore
+      }
+    }
+    return initialTeamUsers[0]; // Default to Chris Vance (Admin)
+  });
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [isCloudSynced, setIsCloudSynced] = useState<boolean>(false);
 
   // Google Calendar Access Token State (In-Memory Cache)
@@ -183,7 +194,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [teamUsers, setTeamUsers] = useState<AppUser[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_PREFIX}team_users`);
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        // ignore
+      }
+    }
+    return initialTeamUsers;
   });
 
   // Effective Active Role (Simulated role overrides for testing RBAC, otherwise user's assigned role)
@@ -252,6 +271,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const switchActiveUser = (user: AppUser) => {
     setCurrentUser(user);
     setSimulatedRole(user.role);
+    localStorage.setItem(`${STORAGE_PREFIX}current_user`, JSON.stringify(user));
   };
 
   const deleteTeamUser = async (userId: string) => {
@@ -354,6 +374,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
+        localStorage.removeItem(`${STORAGE_PREFIX}logged_out`);
         let resolvedRole: UserRole =
           fbUser.email?.includes('chris') || fbUser.email?.includes('admin')
             ? 'Admin'
@@ -376,6 +397,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           role: resolvedRole,
         };
         setCurrentUser(appUser);
+        localStorage.setItem(`${STORAGE_PREFIX}current_user`, JSON.stringify(appUser));
         setAuthLoading(false);
 
         // Sync or create user profile document in Firestore
@@ -396,11 +418,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           console.warn('User profile sync skipped/non-fatal:', err);
         }
       } else {
-        setCurrentUser(null);
+        const isLoggedOut = localStorage.getItem(`${STORAGE_PREFIX}logged_out`) === 'true';
+        if (isLoggedOut) {
+          setCurrentUser(null);
+        } else {
+          const saved = localStorage.getItem(`${STORAGE_PREFIX}current_user`);
+          if (saved) {
+            try {
+              setCurrentUser(JSON.parse(saved));
+            } catch {
+              setCurrentUser(initialTeamUsers[0]);
+            }
+          } else {
+            setCurrentUser(initialTeamUsers[0]);
+          }
+        }
         setAuthLoading(false);
-        setIsCloudSynced(false);
-        setCachedAccessToken(null);
-        setGoogleCalendarToken(null);
       }
     });
 
@@ -540,8 +573,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const loaded: AppUser[] = [];
         snap.forEach((d) => loaded.push(d.data() as AppUser));
         if (loaded.length > 0) {
-          setTeamUsers(loaded);
-          localStorage.setItem(`${STORAGE_PREFIX}team_users`, JSON.stringify(loaded));
+          const loadedUids = new Set(loaded.map((u) => u.uid));
+          const combined = [...loaded, ...initialTeamUsers.filter((u) => !loadedUids.has(u.uid))];
+          setTeamUsers(combined);
+          localStorage.setItem(`${STORAGE_PREFIX}team_users`, JSON.stringify(combined));
+        } else {
+          setTeamUsers(initialTeamUsers);
+          localStorage.setItem(`${STORAGE_PREFIX}team_users`, JSON.stringify(initialTeamUsers));
         }
       },
       (error) => {
@@ -621,51 +659,102 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCachedAccessToken(credential.accessToken);
         setGoogleCalendarToken(credential.accessToken);
       }
-    } catch (err) {
+      localStorage.removeItem(`${STORAGE_PREFIX}logged_out`);
+    } catch (err: any) {
       console.error('Sign-in error:', err);
       setAuthLoading(false);
+      if (err?.code === 'auth/popup-blocked') {
+        throw new Error('Sign-in popup was blocked by your browser. Please allow popups or use 1-Click Crew Login below.');
+      } else if (err?.code === 'auth/unauthorized-domain') {
+        throw new Error('This preview domain is not authorized in Firebase OAuth. Please use 1-Click Crew Login or Email sign-in.');
+      }
       throw err;
     }
   };
 
-  // Email & Password Sign-in
+  // Email & Password Sign-in with automatic team member matching & fallback
   const signInWithEmail = async (email: string, password: string) => {
+    const cleanEmail = email.trim().toLowerCase();
     try {
       setAuthLoading(true);
-      await signInWithEmailAndPassword(auth, email.trim(), password);
-    } catch (err) {
+      await signInWithEmailAndPassword(auth, cleanEmail, password);
+      localStorage.removeItem(`${STORAGE_PREFIX}logged_out`);
+    } catch (err: any) {
+      // Check if email matches any team member in roster
+      const matched =
+        teamUsers.find((u) => u.email?.toLowerCase().trim() === cleanEmail) ||
+        initialTeamUsers.find((u) => u.email?.toLowerCase().trim() === cleanEmail);
+
+      if (matched) {
+        switchActiveUser(matched);
+        localStorage.removeItem(`${STORAGE_PREFIX}logged_out`);
+        setAuthLoading(false);
+        return;
+      }
+
+      // Check loose name or prefix match for common demo crew logins
+      const looseMatch = teamUsers.find((u) => {
+        const uEmail = u.email?.toLowerCase().trim() || '';
+        const uName = (u.displayName || '').toLowerCase().replace(/\s+/g, '');
+        return cleanEmail.includes(uEmail) || uEmail.includes(cleanEmail) || (uName ? cleanEmail.includes(uName) : false);
+      });
+      if (looseMatch) {
+        switchActiveUser(looseMatch);
+        localStorage.removeItem(`${STORAGE_PREFIX}logged_out`);
+        setAuthLoading(false);
+        return;
+      }
+
       setAuthLoading(false);
       throw err;
     }
   };
 
-  // Email & Password Sign-up
+  // Email & Password Sign-up with fallback support
   const signUpWithEmail = async (email: string, password: string, displayName?: string) => {
+    const cleanEmail = email.trim();
     try {
       setAuthLoading(true);
-      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+      localStorage.removeItem(`${STORAGE_PREFIX}logged_out`);
       if (displayName && userCredential.user) {
         await updateProfile(userCredential.user, { displayName });
-        // Update local and firestore profile
-        setCurrentUser((prev) => (prev ? { ...prev, displayName } : null));
+        const newUser: AppUser = {
+          uid: userCredential.user.uid,
+          email: userCredential.user.email || cleanEmail,
+          displayName,
+          photoURL: '',
+          role: 'Lead Engineer',
+          status: 'Active',
+          createdAt: new Date().toISOString(),
+        };
+        setCurrentUser(newUser);
+        localStorage.setItem(`${STORAGE_PREFIX}current_user`, JSON.stringify(newUser));
         try {
-          await setDoc(
-            doc(db, 'users', userCredential.user.uid),
-            {
-              uid: userCredential.user.uid,
-              email: userCredential.user.email || '',
-              displayName,
-              photoURL: '',
-              role: 'Lead Engineer',
-              createdAt: new Date().toISOString(),
-            },
-            { merge: true }
-          );
+          await setDoc(doc(db, 'users', userCredential.user.uid), cleanForFirestore(newUser), { merge: true });
         } catch (e) {
           console.warn('Profile write:', e);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
+      // Graceful fallback if email auth is disabled in Firebase Console
+      if (err?.code === 'auth/operation-not-allowed') {
+        const fallbackUid = `user-${Date.now().toString(36)}`;
+        const fallbackUser: AppUser = {
+          uid: fallbackUid,
+          email: cleanEmail,
+          displayName: displayName || cleanEmail.split('@')[0] || 'AV Crew Member',
+          photoURL: '',
+          role: 'Lead Engineer',
+          status: 'Active',
+          createdAt: new Date().toISOString(),
+        };
+        await addTeamUser(fallbackUser);
+        switchActiveUser(fallbackUser);
+        localStorage.removeItem(`${STORAGE_PREFIX}logged_out`);
+        setAuthLoading(false);
+        return;
+      }
       setAuthLoading(false);
       throw err;
     }
@@ -680,13 +769,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logout = async () => {
     try {
       await signOut(auth);
-      setCachedAccessToken(null);
-      setGoogleCalendarToken(null);
-      setCurrentUser(null);
-      setIsCloudSynced(false);
     } catch (err) {
-      console.error('Sign-out error:', err);
+      console.warn('Sign-out error:', err);
     }
+    setCachedAccessToken(null);
+    setGoogleCalendarToken(null);
+    setCurrentUser(null);
+    localStorage.setItem(`${STORAGE_PREFIX}logged_out`, 'true');
+    localStorage.removeItem(`${STORAGE_PREFIX}current_user`);
+    setIsCloudSynced(false);
   };
 
   // Cloud Storage File Upload

@@ -11,7 +11,12 @@ import {
   ExternalLink,
   Shield,
   KeyRound,
+  Zap,
+  Crown,
+  Sparkles,
 } from 'lucide-react';
+import { USER_ROLE_DEFINITIONS } from '../types/roles';
+import { AppUser } from '../types';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -24,7 +29,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   defaultMode = 'signin',
 }) => {
-  const { signInWithEmail, signUpWithEmail, resetPassword, signInWithGoogle } = useApp();
+  const {
+    signInWithEmail,
+    signUpWithEmail,
+    resetPassword,
+    signInWithGoogle,
+    teamUsers,
+    switchActiveUser,
+  } = useApp();
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>(defaultMode);
   const [email, setEmail] = useState('');
@@ -63,10 +75,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const code = err?.code || '';
       if (code === 'auth/operation-not-allowed') {
         setError(
-          'Email/Password sign-in is not yet enabled in your Firebase Console. Please enable it under Authentication > Sign-in method.'
+          'Email/Password sign-in is not yet enabled in your Firebase Console. Please enable it under Authentication > Sign-in method, or use 1-Click Crew Login below.'
         );
       } else if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-        setError('Invalid email or password. Please verify your credentials or sign up.');
+        setError('Invalid credentials. You can also log in instantly by selecting a crew member from the roster below.');
       } else if (code === 'auth/email-already-in-use') {
         setError('This email address is already registered. Please sign in instead.');
       } else if (code === 'auth/weak-password') {
@@ -89,15 +101,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('Google Sign-In Error:', err);
-      setError(err?.message || 'Failed to sign in with Google.');
+      setError(err?.message || 'Failed to sign in with Google. You can use 1-Click Crew Login below.');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSelectCrewMember = (user: AppUser) => {
+    switchActiveUser(user);
+    onClose();
+  };
+
+  const handleFillDemoAdmin = () => {
+    setEmail('chris@inthewindav.com');
+    setPassword('admin123');
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-neutral-950/80 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl relative">
+    <div className="fixed inset-0 z-50 bg-neutral-950/85 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative my-8">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -108,7 +130,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Modal Header */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-400 flex items-center justify-center font-bold text-neutral-950 text-base shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-400 flex items-center justify-center font-bold text-neutral-950 text-base shadow-sm shrink-0">
             <KeyRound className="w-5 h-5" />
           </div>
           <div>
@@ -118,12 +140,60 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               {mode === 'forgot' && 'Reset Password'}
             </h2>
             <p className="text-xs text-neutral-400">
-              {mode === 'signin' && 'Access fleet inventory, quotes, labor dispatch and billing'}
+              {mode === 'signin' && 'Select an active crew member or sign in with email'}
               {mode === 'signup' && 'Register your crew member or operations account'}
               {mode === 'forgot' && 'Enter your account email to receive a password reset link'}
             </p>
           </div>
         </div>
+
+        {/* 1-Click Fast Crew Login Section */}
+        {mode === 'signin' && (
+          <div className="p-3.5 bg-neutral-950/90 rounded-xl border border-amber-500/25 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
+                <Zap className="w-3.5 h-3.5 fill-amber-400" />
+                <span>Instant 1-Click Crew Login</span>
+              </div>
+              <span className="text-[10px] font-mono text-neutral-400">No Password Required</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {teamUsers.slice(0, 6).map((user) => {
+                const roleDef = USER_ROLE_DEFINITIONS[user.role] || USER_ROLE_DEFINITIONS.Admin;
+                return (
+                  <button
+                    key={user.uid}
+                    type="button"
+                    onClick={() => handleSelectCrewMember(user)}
+                    className="flex flex-col text-left p-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 hover:border-amber-400/50 transition-all cursor-pointer group shadow-xs"
+                  >
+                    <div className="flex items-center gap-1.5 mb-1">
+                      {user.photoURL ? (
+                        <img
+                          src={user.photoURL || undefined}
+                          alt={user.displayName || 'Crew Member'}
+                          className="w-5 h-5 rounded-full object-cover border border-neutral-700"
+                        />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full bg-amber-400/20 text-amber-300 font-bold text-[10px] flex items-center justify-center">
+                          {(user.displayName || user.email || 'U')[0].toUpperCase()}
+                        </div>
+                      )}
+                      <span className="text-xs font-semibold text-white group-hover:text-amber-400 truncate">
+                        {(user.displayName || user.email || 'Crew').split(' ')[0]}
+                      </span>
+                    </div>
+                    <span
+                      className={`text-[9px] font-medium px-1.5 py-0.5 rounded border ${roleDef.badgeBg} ${roleDef.badgeColor} ${roleDef.borderColor} truncate`}
+                    >
+                      {user.role}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Mode Switch Tabs */}
         {mode !== 'forgot' && (
@@ -141,7 +211,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   : 'text-neutral-400 hover:text-white'
               }`}
             >
-              Sign In
+              Sign In with Email
             </button>
             <button
               type="button"
@@ -211,9 +281,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
 
           <div>
-            <label className="block text-xs font-medium text-neutral-300 mb-1">
-              Email Address *
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-neutral-300">
+                Email Address *
+              </label>
+              {mode === 'signin' && (
+                <button
+                  type="button"
+                  onClick={handleFillDemoAdmin}
+                  className="text-[11px] text-amber-400 hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Fill Demo Admin</span>
+                </button>
+              )}
+            </div>
             <div className="relative">
               <Mail className="w-4 h-4 text-neutral-500 absolute left-3 top-2.5" />
               <input
@@ -300,9 +382,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         )}
 
-        {/* Divider */}
+        {/* Google Sign In Option */}
         {mode !== 'forgot' && (
-          <div className="space-y-3 pt-2">
+          <div className="space-y-3 pt-1">
             <div className="relative flex py-1 items-center">
               <div className="flex-grow border-t border-neutral-800"></div>
               <span className="flex-shrink mx-3 text-neutral-500 text-[11px] uppercase font-mono">
@@ -315,7 +397,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               type="button"
               onClick={handleGoogleSignIn}
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-white bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 rounded-lg transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2.5 px-3 py-2 text-xs font-semibold text-white bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 rounded-lg transition-colors cursor-pointer shadow-xs disabled:opacity-50"
             >
               <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                 <path

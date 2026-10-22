@@ -87,6 +87,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewQuote, onOpenSettings }
       await signInWithGoogle();
     } catch (err) {
       console.warn('Google sign in error:', err);
+      setIsAuthModalOpen(true);
     } finally {
       setIsSigningIn(false);
     }
@@ -312,18 +313,28 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewQuote, onOpenSettings }
             {/* User Profile / Auth buttons */}
             {currentUser ? (
               <div className="flex items-center gap-2 pl-1 border-l border-neutral-800">
-                {currentUser.photoURL ? (
-                  <img
-                    src={currentUser.photoURL}
-                    alt={currentUser.displayName || 'User'}
-                    referrerPolicy="no-referrer"
-                    className="w-7 h-7 rounded-full object-cover border border-neutral-700"
-                  />
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-amber-400/20 text-amber-400 font-bold text-xs flex items-center justify-center border border-amber-400/40">
-                    {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setIsAuthModalOpen(true)}
+                  title="Switch user or account"
+                  className="flex items-center gap-1.5 hover:opacity-85 transition-opacity cursor-pointer group"
+                >
+                  {currentUser.photoURL ? (
+                    <img
+                      src={currentUser.photoURL}
+                      alt={currentUser.displayName || 'User'}
+                      referrerPolicy="no-referrer"
+                      className="w-7 h-7 rounded-full object-cover border border-neutral-700 group-hover:border-amber-400 transition-colors"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-amber-400/20 text-amber-400 font-bold text-xs flex items-center justify-center border border-amber-400/40 group-hover:border-amber-400 transition-colors">
+                      {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
+                  <span className="hidden xl:inline text-xs font-semibold text-neutral-300 group-hover:text-white max-w-[110px] truncate">
+                    {currentUser.displayName}
+                  </span>
+                </button>
                 <button
                   onClick={logout}
                   title="Sign Out"
