@@ -1,0 +1,16 @@
+# Development image for the Base44 sandbox.
+#
+# Only dependencies are baked in here (no application source): the repo is
+# bind-mounted at /app by docker-compose.base44.yml so code edits are picked up
+# by the Vite dev server without rebuilding.
+FROM node:22-alpine
+
+RUN apk add --no-cache curl git
+
+# The project pins its dependencies with bun.lock; use bun only as the installer.
+RUN npm install -g bun@1.4.4
+
+WORKDIR /app
+
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile

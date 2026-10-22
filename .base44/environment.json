@@ -1,0 +1,12 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/api/health",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "VITE_FIREBASE_API_KEY",
+      "description": "Firebase Web API key for project gen-lang-client-0564368936 (Firebase console -> Project settings -> General -> Web app config -> apiKey). The key committed in firebase-applet-config.json is redacted, so Firebase Auth sign-in, Firestore real-time sync and Storage uploads fail without it. The UI still renders from its local cached data. Optional for boot.",
+      "requiredAtBoot": false
+    }
+  ]
+}

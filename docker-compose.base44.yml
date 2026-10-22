@@ -1,0 +1,99 @@
+services:
+  # PostgreSQL backing the /api routes (drizzle ORM).
+  db:
+    image: postgres:16-alpine
+    restart: on-failure
+    environment:
+      POSTGRES_DB: inthewindav
+      POSTGRES_USER: avapp
+      POSTGRES_PASSWORD: avapp_dev_password
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U avapp -d inthewindav"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # One-shot: create/update the drizzle schema.
+  db-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.base44
+    working_dir: /app
+    volumes:
+      - .:/app
+      - app_node_modules:/app/node_modules
+    environment:
+      - SQL_HOST=db
+      - SQL_DB_NAME=inthewindav
+      - SQL_USER=avapp
+      - SQL_PASSWORD=avapp_dev_password
+      - SQL_ADMIN_USER=avapp
+      - SQL_ADMIN_PASSWORD=avapp_dev_password
+      - CHOKIDAR_USEPOLLING=1
+    command:
+      ["sh", "-ec", "bun install --frozen-lockfile && ./node_modules/.bin/drizzle-kit push --config backend/db/drizzle.config.ts"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Express API + Vite dev server (single origin, host port 3000).
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.base44
+    working_dir: /app
+    restart: on-failure
+    labels:
+      base44.project: "In The Wind AV"
+      base44.kind: "web"
+      base44.port: "3000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - app_node_modules:/app/node_modules
+    environment:
+      - PORT=3000
+      - SQL_HOST=db
+      - SQL_DB_NAME=inthewindav
+      - SQL_USER=avapp
+      - SQL_PASSWORD=avapp_dev_password
+      - SQL_ADMIN_USER=avapp
+      - SQL_ADMIN_PASSWORD=avapp_dev_password
+      - CHOKIDAR_USEPOLLING=1
+      - CHOKIDAR_INTERVAL=300
+      # Vite host check needs the proxied preview hostname (platform-provided).
+      - __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS
+      # Vite origin check / allowedDevOrigins equivalents.
+      - BASE44_PUBLIC_HOST_SUFFIX
+      - BASE44_SANDBOX_HOST_DOMAIN
+      - BASE44_PREVIEW_MODE
+    env_file:
+      # Platform-managed secrets (never in git, always wins over the defaults above).
+      - /run/base44/app.env
+    command:
+      ["sh", "-ec", "bun install --frozen-lockfile && exec ./node_modules/.bin/tsx server.ts"]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS http://localhost:3000/api/health >/dev/null ||
+          { echo 'api health failed'; exit 1; };
+          curl -fsS http://localhost:3000/ >/dev/null ||
+          { echo 'frontend failed'; exit 1; }
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+    depends_on:
+      db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+
+volumes:
+  db_data:
+  app_node_modules:

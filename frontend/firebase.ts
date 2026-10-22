@@ -13,8 +13,15 @@ import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId); /* CRITICAL: The app will break without this line */
+// The committed config carries a redacted apiKey; a real one can be supplied
+// through VITE_FIREBASE_API_KEY (Base44 secret) without editing this file.
+const resolvedFirebaseConfig = {
+  ...firebaseConfig,
+  apiKey: (import.meta.env.VITE_FIREBASE_API_KEY as string | undefined) || firebaseConfig.apiKey,
+};
+
+const app = initializeApp(resolvedFirebaseConfig);
+export const db = getFirestore(app, (resolvedFirebaseConfig as any).firestoreDatabaseId); /* CRITICAL: The app will break without this line */
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
