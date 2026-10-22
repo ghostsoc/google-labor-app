@@ -1,0 +1,164 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { RefreshCw, Check } from 'lucide-react';
+
+interface CompanySettingsFormProps {
+  /** Called after a successful "Re-sync Live Database" so a modal host can close itself. */
+  onAfterReset?: () => void;
+}
+
+/**
+ * Company profile & operational defaults editor. Shared by the settings modal
+ * and the dedicated /admin route so both stay in sync.
+ */
+export const CompanySettingsForm: React.FC<CompanySettingsFormProps> = ({ onAfterReset }) => {
+  const { settings, updateSettings, resetAllData, userHasPermission, activeRole } = useApp();
+  const [formData, setFormData] = useState(settings);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+
+  const canEdit = userHasPermission('canManageCompanySettings');
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canEdit) return;
+    updateSettings(formData);
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 2000);
+  };
+
+  const handleReset = () => {
+    if (!canEdit) return;
+    if (confirm('Re-sync and reload all live records directly from the cloud database?')) {
+      resetAllData();
+      onAfterReset?.();
+    }
+  };
+
+  return (
+    <>
+      {!canEdit && (
+        <div className="p-3 bg-amber-400/10 border border-amber-400/20 rounded-xl text-xs text-amber-300">
+          🔒 <strong>View-Only Mode:</strong> Company profile and operational defaults are managed exclusively by Administrators. You are currently viewing as <strong>{activeRole}</strong>.
+        </div>
+      )}
+
+      <form onSubmit={handleSave} className="space-y-4 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <label className="block text-neutral-300 mb-1 font-medium">Company Name</label>
+            <input
+              type="text"
+              value={formData.companyName}
+              onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+              className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-white focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-neutral-300 mb-1">Tagline</label>
+            <input
+              type="text"
+              value={formData.tagline}
+              onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
+              className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-white focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-neutral-300 mb-1">Contact Email</label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-white focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-neutral-300 mb-1">Contact Phone</label>
+            <input
+              type="text"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-white focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-neutral-300 mb-1">Warehouse & Office Address</label>
+            <input
+              type="text"
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-white focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-neutral-300 mb-1">Default Tax Rate (%)</label>
+            <input
+              type="number"
+              step="0.1"
+              value={formData.defaultTaxRate}
+              onChange={(e) =>
+                setFormData({ ...formData, defaultTaxRate: Number(e.target.value) })
+              }
+              className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-white font-mono focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-neutral-300 mb-1">Default Damage Waiver (%)</label>
+            <input
+              type="number"
+              step="0.5"
+              value={formData.defaultDamageWaiver}
+              onChange={(e) =>
+                setFormData({ ...formData, defaultDamageWaiver: Number(e.target.value) })
+              }
+              className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-white font-mono focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-neutral-300 mb-1">Standard Rental Agreement Terms & Conditions</label>
+            <textarea
+              rows={5}
+              value={formData.termsAndConditions}
+              onChange={(e) => setFormData({ ...formData, termsAndConditions: e.target.value })}
+              className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-lg text-white font-mono text-[11px] focus:outline-none focus:border-amber-400"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-neutral-800">
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={!canEdit}
+            className="flex items-center gap-1.5 px-3 py-2 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded-lg border border-rose-900/60 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Re-sync Live Database</span>
+          </button>
+
+          <div className="flex items-center gap-2">
+            {savedSuccess && (
+              <span className="text-emerald-400 flex items-center gap-1">
+                <Check className="w-3.5 h-3.5" />
+                Saved
+              </span>
+            )}
+            <button
+              type="submit"
+              disabled={!canEdit}
+              className="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Save Settings
+            </button>
+          </div>
+        </div>
+      </form>
+    </>
+  );
+};

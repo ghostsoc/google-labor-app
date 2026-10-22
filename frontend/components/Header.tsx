@@ -299,6 +299,14 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNewQuote, onOpenSettings }
                       <Users className="w-3.5 h-3.5 text-purple-400" />
                       <span>Manage Team Roles & RBAC</span>
                     </button>
+                    <a
+                      href="/admin"
+                      onClick={() => setIsRoleDropdownOpen(false)}
+                      className="mt-1.5 w-full flex items-center justify-center gap-2 py-1.5 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 text-neutral-200 font-semibold text-xs rounded-lg transition-colors"
+                    >
+                      <Shield className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Admin Console</span>
+                    </a>
                   </div>
                 </div>
               )}

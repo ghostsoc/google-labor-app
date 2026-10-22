@@ -52,6 +52,7 @@ import {
 import {
   initialCompanySettings,
 } from '../data/mockData';
+import { logAdminAction } from '../utils/adminAudit';
 
 interface AppContextType {
   activeTab: ActiveTab;
@@ -193,8 +194,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateUserRole = async (userId: string, newRole: UserRole) => {
+    const previous = teamUsers.find((u) => u.uid === userId);
     const updated = teamUsers.map((u) => (u.uid === userId ? { ...u, role: newRole } : u));
     setTeamUsers(updated);
+    logAdminAction(
+      'Role changed',
+      `${previous?.email || userId} → ${newRole}`,
+      currentUser?.email
+    );
     localStorage.setItem(`${STORAGE_PREFIX}team_users`, JSON.stringify(updated));
 
     if (currentUser && currentUser.uid === userId) {
@@ -1148,6 +1155,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateSettings = async (newSettings: Partial<CompanySettings>) => {
     const updated = { ...settings, ...newSettings };
     setSettings(updated);
+    logAdminAction(
+      'Settings updated',
+      'Company profile & operational defaults saved',
+      currentUser?.email
+    );
 
     if (currentUser) {
       const path = 'settings/company';
@@ -1160,6 +1172,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetAllData = async () => {
+    logAdminAction('Data re-sync', 'Reloaded all collections from the cloud database', currentUser?.email);
     localStorage.removeItem(`${STORAGE_PREFIX}inventory`);
     localStorage.removeItem(`${STORAGE_PREFIX}staff`);
     localStorage.removeItem(`${STORAGE_PREFIX}shifts`);

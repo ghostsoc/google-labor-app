@@ -8,6 +8,7 @@ import { StaffScheduler } from './components/StaffScheduler';
 import { QuotesManager } from './components/QuotesManager';
 import { InvoicesManager } from './components/InvoicesManager';
 import { ClientsManager } from './components/ClientsManager';
+import { AdminPage } from './components/AdminPage';
 import { WarehousePullSheet } from './components/WarehousePullSheet';
 import { TeamManager } from './components/TeamManager';
 import { QuotePrintView } from './components/QuotePrintView';
@@ -157,9 +158,13 @@ const MainLayout: React.FC = () => {
 };
 
 export default function App() {
+  // Minimal path routing: the workspace is tab-driven, and /admin is the one
+  // dedicated route served by the same document.
+  const isAdminRoute = window.location.pathname.replace(/\/+$/, '') === '/admin';
+
   return (
     <AppProvider>
-      <MainLayout />
+      {isAdminRoute ? <AdminPage /> : <MainLayout />}
     </AppProvider>
   );
 }
